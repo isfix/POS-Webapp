@@ -11,7 +11,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Pencil, Trash2, MoreHorizontal, PlusCircle, Calendar as CalendarIcon, FileDown, Search } from 'lucide-react';
+import { Pencil, Trash2, MoreHorizontal, PlusCircle, Calendar as CalendarIcon, FileDown, Search, Loader2 } from 'lucide-react';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -39,6 +39,7 @@ import { Timestamp } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '../ui/skeleton';
 import { ScrollArea, ScrollBar } from '../ui/scroll-area';
+import { supabase } from '@/lib/supabase';
 import * as xlsx from 'xlsx';
 
 export type Asset = {
@@ -74,7 +75,8 @@ type ItemFormData = {
     maintenanceDate?: Date;
     status: typeof assetStatuses[number];
     notes: string;
-    imageUrl: string;
+    imageFile?: File | null;
+    imageUrl?: string;
 };
 
 type DataTableProps = {
@@ -99,6 +101,7 @@ const emptyFormState: ItemFormData = {
     maintenanceDate: undefined,
     status: 'Active',
     notes: '',
+    imageFile: null,
     imageUrl: '',
 };
 
@@ -114,6 +117,7 @@ export function AssetTable({ assets, onAddItem, onEditItem, onDeleteItem, onExpo
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Asset | null>(null);
   const [formData, setFormData] = useState<ItemFormData>(emptyFormState);
+  const [uploading, setUploading] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -146,6 +150,7 @@ export function AssetTable({ assets, onAddItem, onEditItem, onDeleteItem, onExpo
             status: item.status as any,
             notes: item.notes || '',
             imageUrl: item.imageUrl || '',
+            imageFile: null,
         });
     } else {
         setEditingItem(null);
@@ -155,15 +160,46 @@ export function AssetTable({ assets, onAddItem, onEditItem, onDeleteItem, onExpo
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    const { name, value, files } = e.target as HTMLInputElement;
+    if (name === 'imageFile' && files) {
+        setFormData((prev) => ({ ...prev, imageFile: files[0] }));
+    } else {
+        setFormData((prev) => ({ ...prev, [name]: value }));
+    }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const isOther = formData.category === 'Other';
     if (!formData.name || !formData.category || (isOther && !formData.otherCategory.trim()) || !formData.quantity || !formData.price || !formData.location || !formData.purchaseDate) {
         toast({ title: 'Error', description: 'Please fill all required fields, including the custom category name if you selected "Other".', variant: 'destructive' });
         return;
+    }
+
+    setUploading(true);
+
+    let uploadedImageUrl = editingItem?.imageUrl || '';
+
+    if (formData.imageFile) {
+        const file = formData.imageFile;
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}.${fileExt}`;
+        const filePath = `assets/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+            .from('images')
+            .upload(filePath, file);
+
+        if (uploadError) {
+            toast({ title: 'Upload Error', description: uploadError.message, variant: 'destructive' });
+            setUploading(false);
+            return;
+        }
+
+        const { data: urlData } = supabase.storage
+            .from('images')
+            .getPublicUrl(filePath);
+        
+        uploadedImageUrl = urlData.publicUrl;
     }
 
     const submissionData = {
@@ -177,7 +213,7 @@ export function AssetTable({ assets, onAddItem, onEditItem, onDeleteItem, onExpo
         location: formData.location,
         status: formData.status,
         notes: formData.notes || '',
-        imageUrl: formData.imageUrl || '',
+        imageUrl: uploadedImageUrl,
         maintenanceDate: formData.maintenanceDate ? Timestamp.fromDate(formData.maintenanceDate) : null,
     };
 
@@ -186,7 +222,8 @@ export function AssetTable({ assets, onAddItem, onEditItem, onDeleteItem, onExpo
     } else {
         onAddItem(submissionData as Omit<Asset, 'id'>);
     }
-
+    
+    setUploading(false);
     setIsFormOpen(false);
   };
   
@@ -223,7 +260,7 @@ export function AssetTable({ assets, onAddItem, onEditItem, onDeleteItem, onExpo
     return filteredAssets.map((item) => (
         <TableRow key={item.id} className="[&_td]:text-center [&_td:not(:last-child)]:border-r">
             <TableCell className="font-medium whitespace-nowrap">{item.name}</TableCell>
-            <TableCell className="whitespace-nowrap"><Badge variant="secondary">{item.category}</Badge></TableCell>
+            <TableCell className="whitespace-nowrap"><Badge variant="outline" className="border-orange-600/50 text-orange-800 bg-orange-500/10">{item.category}</Badge></TableCell>
             <TableCell className="whitespace-nowrap">
                  <Badge 
                     variant="outline" 
@@ -448,8 +485,11 @@ export function AssetTable({ assets, onAddItem, onEditItem, onDeleteItem, onExpo
                     </div>
                     
                     <div className="space-y-2">
-                        <Label htmlFor="imageUrl">Image URL</Label>
-                        <Input id="imageUrl" name="imageUrl" value={formData.imageUrl} onChange={handleInputChange} placeholder="(Optional)"/>
+                        <Label htmlFor="imageFile">Image</Label>
+                        <Input id="imageFile" name="imageFile" type="file" accept="image/*" onChange={handleInputChange}/>
+                         {formData.imageUrl && !formData.imageFile && (
+                            <p className="text-xs text-muted-foreground">Current image is set. Upload a new file to replace it.</p>
+                        )}
                     </div>
 
                     <div className="space-y-2">
@@ -460,7 +500,10 @@ export function AssetTable({ assets, onAddItem, onEditItem, onDeleteItem, onExpo
             </ScrollArea>
             <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)}>Cancel</Button>
-                <Button type="submit" onClick={handleSubmit}>Save Changes</Button>
+                <Button type="submit" onClick={handleSubmit} disabled={uploading}>
+                    {uploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Save Changes
+                </Button>
             </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -10,7 +10,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Pencil, Trash2, MoreHorizontal, PlusCircle } from 'lucide-react';
+import { Pencil, Trash2, MoreHorizontal, PlusCircle, Loader2 } from 'lucide-react';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -32,6 +32,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Switch } from '../ui/switch';
 import { Badge } from '../ui/badge';
 import { ScrollArea, ScrollBar } from '../ui/scroll-area';
+import { supabase } from '@/lib/supabase';
 
 export type MenuItem = {
   id: string;
@@ -48,8 +49,9 @@ type ItemFormData = {
     name: string;
     category: string;
     price: string;
-    costPrice: string; // New field
-    imageUrl: string;
+    costPrice: string;
+    imageFile?: File | null;
+    imageUrl?: string;
     ingredients: string; // Stored as comma-separated string in the form
     availability: boolean;
 }
@@ -61,7 +63,7 @@ type DataTableProps = {
     onDeleteItem: (item: MenuItem) => void;
 }
 
-const emptyFormState: ItemFormData = { name: '', category: '', price: '', costPrice: '', imageUrl: '', ingredients: '', availability: true };
+const emptyFormState: ItemFormData = { name: '', category: '', price: '', costPrice: '', imageFile: null, imageUrl: '', ingredients: '', availability: true };
 
 const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('id-ID', {
@@ -75,6 +77,7 @@ export function DataTable({ menuItems, onAddItem, onEditItem, onDeleteItem }: Da
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [formData, setFormData] = useState<ItemFormData>(emptyFormState);
+  const [uploading, setUploading] = useState(false);
   const { toast } = useToast();
 
   const handleOpenForm = (item: MenuItem | null = null) => {
@@ -84,8 +87,9 @@ export function DataTable({ menuItems, onAddItem, onEditItem, onDeleteItem }: Da
             name: item.name,
             category: item.category,
             price: item.price.toString(),
-            costPrice: (item.costPrice || 0).toString(), // Handle existing items
+            costPrice: (item.costPrice || 0).toString(),
             imageUrl: item.imageUrl || '',
+            imageFile: null,
             ingredients: item.ingredients?.join(', ') || '',
             availability: item.availability,
         });
@@ -97,18 +101,49 @@ export function DataTable({ menuItems, onAddItem, onEditItem, onDeleteItem }: Da
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    const { name, value, files } = e.target;
+    if (name === 'imageFile' && files) {
+        setFormData((prev) => ({ ...prev, imageFile: files[0] }));
+    } else {
+        setFormData((prev) => ({ ...prev, [name]: value }));
+    }
   }
 
   const handleSwitchChange = (checked: boolean) => {
     setFormData((prev) => ({ ...prev, availability: checked }));
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!formData.name || !formData.category || !formData.price || !formData.costPrice) {
         toast({ title: 'Error', description: 'Please fill all required fields (Name, Category, Price, Cost).', variant: 'destructive' });
         return;
+    }
+    
+    setUploading(true);
+
+    let uploadedImageUrl = editingItem?.imageUrl || '';
+
+    if (formData.imageFile) {
+        const file = formData.imageFile;
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}.${fileExt}`;
+        const filePath = `menu-items/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+            .from('images')
+            .upload(filePath, file);
+
+        if (uploadError) {
+            toast({ title: 'Upload Error', description: uploadError.message, variant: 'destructive' });
+            setUploading(false);
+            return;
+        }
+
+        const { data: urlData } = supabase.storage
+            .from('images')
+            .getPublicUrl(filePath);
+        
+        uploadedImageUrl = urlData.publicUrl;
     }
 
     const submissionData = {
@@ -116,7 +151,7 @@ export function DataTable({ menuItems, onAddItem, onEditItem, onDeleteItem }: Da
         category: formData.category,
         price: parseFloat(formData.price),
         costPrice: parseFloat(formData.costPrice),
-        imageUrl: formData.imageUrl,
+        imageUrl: uploadedImageUrl,
         ingredients: formData.ingredients.split(',').map(s => s.trim()).filter(Boolean),
         availability: formData.availability,
     };
@@ -127,6 +162,7 @@ export function DataTable({ menuItems, onAddItem, onEditItem, onDeleteItem }: Da
         onAddItem(submissionData);
     }
 
+    setUploading(false);
     setIsFormOpen(false);
   }
 
@@ -222,8 +258,11 @@ export function DataTable({ menuItems, onAddItem, onEditItem, onDeleteItem }: Da
                     </div>
                 </div>
                  <div className="space-y-2">
-                    <Label htmlFor="imageUrl">Image URL</Label>
-                    <Input id="imageUrl" name="imageUrl" value={formData.imageUrl} onChange={handleInputChange} placeholder="https://... (Optional)"/>
+                    <Label htmlFor="imageFile">Image</Label>
+                    <Input id="imageFile" name="imageFile" type="file" accept="image/*" onChange={handleInputChange} />
+                    {formData.imageUrl && !formData.imageFile && (
+                        <p className="text-xs text-muted-foreground">Current image is set. Upload a new file to replace it.</p>
+                    )}
                 </div>
                  <div className="space-y-2">
                     <Label htmlFor="ingredients">Ingredients</Label>
@@ -236,7 +275,10 @@ export function DataTable({ menuItems, onAddItem, onEditItem, onDeleteItem }: Da
             </div>
             <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)}>Cancel</Button>
-                <Button type="submit" onClick={handleSubmit}>Save Changes</Button>
+                <Button type="submit" onClick={handleSubmit} disabled={uploading}>
+                    {uploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Save Changes
+                </Button>
             </DialogFooter>
         </DialogContent>
     </Dialog>

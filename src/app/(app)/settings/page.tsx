@@ -3,7 +3,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/context/AuthContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { User } from "lucide-react";
+import { User, Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/lib/supabase";
+import { Separator } from "@/components/ui/separator";
 
 const colorOptions = [
     { name: 'Default', value: 'default', hsl: '240 67% 97%', className: 'bg-[hsl(240,67%,97%)]' },
@@ -35,6 +37,8 @@ export default function SettingsPage() {
     const { user, loading } = useAuth();
     const { toast } = useToast();
     const [imageUrl, setImageUrl] = useState('');
+    const [imageFile, setImageFile] = useState<File | null>(null);
+    const [uploading, setUploading] = useState(false);
 
     const handleBackgroundChange = (type: 'color' | 'image', value: string) => {
         try {
@@ -66,6 +70,36 @@ export default function SettingsPage() {
     const handleReset = () => {
         handleBackgroundChange('color', 'default');
     }
+
+    const handleImageUpload = async () => {
+        if (!imageFile) {
+            toast({ title: 'No file selected', description: 'Please choose an image to upload.', variant: 'destructive' });
+            return;
+        }
+        setUploading(true);
+
+        const fileExt = imageFile.name.split('.').pop();
+        const fileName = `bg-${Date.now()}.${fileExt}`;
+        const filePath = `backgrounds/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+            .from('images')
+            .upload(filePath, imageFile);
+
+        if (uploadError) {
+            toast({ title: 'Upload Error', description: uploadError.message, variant: 'destructive' });
+            setUploading(false);
+            return;
+        }
+
+        const { data: urlData } = supabase.storage
+            .from('images')
+            .getPublicUrl(filePath);
+
+        handleBackgroundChange('image', urlData.publicUrl);
+        setUploading(false);
+        setImageFile(null); 
+    };
 
     return (
         <div className="space-y-6">
@@ -122,15 +156,33 @@ export default function SettingsPage() {
                         <TabsContent value="image" className="mt-4">
                             <div className="space-y-4">
                                 <div className="space-y-2">
-                                    <Label htmlFor="imageUrl">Background image URL</Label>
+                                    <Label htmlFor="imageUpload">Upload a new background</Label>
                                     <Input 
-                                        id="imageUrl"
-                                        placeholder="https://images.unsplash.com/..." 
-                                        value={imageUrl} 
-                                        onChange={(e) => setImageUrl(e.target.value)} 
+                                        id="imageUpload"
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => setImageFile(e.target.files ? e.target.files[0] : null)}
                                     />
                                 </div>
-                                <Button onClick={() => handleBackgroundChange('image', imageUrl)}>Apply Image</Button>
+                                <Button onClick={handleImageUpload} disabled={uploading || !imageFile}>
+                                    {uploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                    Upload & Apply
+                                </Button>
+                                
+                                <Separator />
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="imageUrl">Or use image URL (Legacy)</Label>
+                                    <div className="flex gap-2">
+                                        <Input 
+                                            id="imageUrl"
+                                            placeholder="https://images.unsplash.com/..." 
+                                            value={imageUrl} 
+                                            onChange={(e) => setImageUrl(e.target.value)} 
+                                        />
+                                        <Button onClick={() => handleBackgroundChange('image', imageUrl)} variant="outline">Apply URL</Button>
+                                    </div>
+                                </div>
                             </div>
                         </TabsContent>
                     </Tabs>
