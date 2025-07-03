@@ -1,0 +1,105 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 67% 97%; /* #E6E6FA - Soft Lavender */
+    --foreground: 240 10% 20%;
+    --card: 240 30% 96%; /* For translucent glass base */
+    --card-foreground: 240 10% 20%;
+    --popover: 255 100% 100%;
+    --popover-foreground: 240 10% 20%;
+    --primary: 240 10% 40%; /* #595973 - Dark Muted Grape */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 94%; /* #F0F0F0 - Light Gray */
+    --secondary-foreground: 240 10% 20%;
+    --muted: 0 0% 94%;
+    --muted-foreground: 240 10% 45%;
+    --accent: 240 10% 85%; /* Lighter Muted Grape for accents */
+    --accent-foreground: 240 10% 20%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5% 85%;
+    --input: 240 5% 90%;
+    --ring: 240 10% 40%;
+
+    --radius: 0.75rem;
+
+    --chart-1: 240 10% 40%;
+    --chart-2: 240 10% 55%;
+    --chart-3: 240 10% 70%;
+    --chart-4: 240 10% 80%;
+    --chart-5: 240 10% 90%;
+
+    --sidebar-background: 255 100% 100%;
+    --sidebar-foreground: 240 10% 20%;
+    --sidebar-primary: 240 10% 40%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 10% 90%;
+    --sidebar-accent-foreground: 240 10% 20%;
+    --sidebar-border: 240 5% 90%;
+    --sidebar-ring: 240 10% 40%;
+  }
+  .dark {
+    --background: 240 10% 5%;
+    --foreground: 0 0% 98%;
+    --card: 240 4% 15%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 10% 5%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 240 20% 75%;
+    --primary-foreground: 240 10% 5%;
+    --secondary: 240 5% 15%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 5% 15%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 240 5% 25%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5% 20%;
+    --input: 240 5% 20%;
+    --ring: 240 20% 75%;
+
+    --chart-1: 240 20% 75%;
+    --chart-2: 240 20% 65%;
+    --chart-3: 240 20% 55%;
+    --chart-4: 240 20% 45%;
+    --chart-5: 240 20% 35%;
+
+    --sidebar-background: 240 10% 10%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-primary: 240 20% 75%;
+    --sidebar-primary-foreground: 240 10% 5%;
+    --sidebar-accent: 240 5% 25%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 240 5% 20%;
+    --sidebar-ring: 240 20% 75%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    min-height: 100vh;
+  }
+  html {
+    @apply bg-background;
+  }
+  html.has-image-background {
+    @apply bg-transparent;
+  }
+  /* Hide number input arrows */
+  input[type=number]::-webkit-inner-spin-button,
+  input[type=number]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type=number] {
+    -moz-appearance: textfield;
+  }
+}
