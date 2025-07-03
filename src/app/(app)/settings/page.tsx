@@ -80,7 +80,7 @@ export default function SettingsPage() {
 
         const fileExt = imageFile.name.split('.').pop();
         const fileName = `bg-${Date.now()}.${fileExt}`;
-        const filePath = `backgrounds/${fileName}`;
+        const filePath = fileName;
 
         const { error: uploadError } = await supabase.storage
             .from(supabaseBucketName!)

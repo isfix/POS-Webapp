@@ -183,7 +183,7 @@ export function AssetTable({ assets, onAddItem, onEditItem, onDeleteItem, onExpo
         const file = formData.imageFile;
         const fileExt = file.name.split('.').pop();
         const fileName = `${Date.now()}.${fileExt}`;
-        const filePath = `assets/${fileName}`;
+        const filePath = fileName;
 
         const { error: uploadError } = await supabase.storage
             .from(supabaseBucketName!)

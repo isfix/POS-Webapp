@@ -127,7 +127,7 @@ export function DataTable({ menuItems, onAddItem, onEditItem, onDeleteItem }: Da
         const file = formData.imageFile;
         const fileExt = file.name.split('.').pop();
         const fileName = `${Date.now()}.${fileExt}`;
-        const filePath = `menu-items/${fileName}`;
+        const filePath = fileName;
 
         const { error: uploadError } = await supabase.storage
             .from(supabaseBucketName!)
