@@ -90,12 +90,15 @@
   html {
     @apply bg-background;
   }
-  html.has-image-background {
-    @apply bg-transparent;
+  
+  main {
+    @apply bg-card/40;
   }
+
   html.has-image-background main {
-    @apply bg-card/10;
+    @apply bg-card/10 !important;
   }
+
   /* Hide number input arrows */
   input[type=number]::-webkit-inner-spin-button,
   input[type=number]::-webkit-outer-spin-button {
