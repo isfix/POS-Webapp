@@ -165,7 +165,7 @@ export function MainSidebar() {
       <Sheet open={openMobile} onOpenChange={setOpenMobile}>
         <SheetContent
           side="left"
-          className="w-72 bg-card/40 backdrop-blur-2xl p-0 text-sidebar-foreground border-r-0 flex flex-col"
+          className="w-72 glass-pane p-0 text-sidebar-foreground border-r-0 flex flex-col"
         >
           <SheetTitle className="sr-only">Main Menu</SheetTitle>
           <SheetDescription className="sr-only">
@@ -185,7 +185,7 @@ export function MainSidebar() {
     >
       <div
         data-sidebar="sidebar"
-        className="flex h-full flex-col bg-card/40 backdrop-blur-2xl overflow-hidden group-data-[variant=floating]:rounded-lg"
+        className="flex h-full flex-col glass-pane overflow-hidden group-data-[variant=floating]:rounded-lg"
       >
         {content}
       </div>

@@ -40,6 +40,9 @@
     --sidebar-accent-foreground: 240 10% 20%;
     --sidebar-border: 240 5% 90%;
     --sidebar-ring: 240 10% 40%;
+
+    --glass-blur: 16px;
+    --glass-opacity: 0.4;
   }
   .dark {
     --background: 240 10% 5%;
@@ -90,14 +93,6 @@
   html {
     @apply bg-background;
   }
-  
-  main {
-    @apply bg-card/40;
-  }
-
-  html.has-image-background main {
-    @apply bg-card/10 !important;
-  }
 
   /* Hide number input arrows */
   input[type=number]::-webkit-inner-spin-button,
@@ -108,4 +103,12 @@
   input[type=number] {
     -moz-appearance: textfield;
   }
+}
+
+@layer components {
+    .glass-pane {
+        background-color: hsla(var(--card), var(--glass-opacity));
+        backdrop-filter: blur(var(--glass-blur));
+        @apply border border-white/20 shadow-glass;
+    }
 }

@@ -3,9 +3,9 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/context/AuthContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { User, Loader2 } from "lucide-react";
+import { User, Loader2, History, Trash2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,8 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { supabase, supabaseBucketName } from "@/lib/supabase";
 import { Separator } from "@/components/ui/separator";
+import { Slider } from "@/components/ui/slider";
+import Image from "next/image";
 
 const colorOptions = [
     { name: 'Default', value: 'default', hsl: '240 67% 97%', className: 'bg-[hsl(240,67%,97%)]' },
@@ -45,6 +47,25 @@ export default function SettingsPage() {
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [uploading, setUploading] = useState(false);
 
+    const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+    const [blurLevel, setBlurLevel] = useState(16);
+    const [opacityLevel, setOpacityLevel] = useState(0.4);
+
+    useEffect(() => {
+        // Load image history
+        const history = localStorage.getItem('backgroundImageHistory');
+        if (history) {
+            setUploadedImages(JSON.parse(history));
+        }
+        // Load glass effects
+        const glassSettings = localStorage.getItem('glassEffectSettings');
+        if(glassSettings) {
+            const { blur, opacity } = JSON.parse(glassSettings);
+            setBlurLevel(blur);
+            setOpacityLevel(opacity);
+        }
+    }, []);
+
     const handleBackgroundChange = (type: 'color' | 'image', value: string) => {
         try {
             if (type === 'image') {
@@ -54,9 +75,6 @@ export default function SettingsPage() {
                 }
                 document.documentElement.classList.add('has-image-background');
                 document.body.style.backgroundImage = `url('${value}')`;
-                document.body.style.backgroundSize = 'cover';
-                document.body.style.backgroundPosition = 'center';
-                document.body.style.backgroundAttachment = 'fixed';
             } else {
                  document.documentElement.classList.remove('has-image-background');
                  document.body.style.backgroundImage = 'none';
@@ -89,9 +107,7 @@ export default function SettingsPage() {
 
         const { error: uploadError } = await supabase.storage
             .from(supabaseBucketName!)
-            .upload(filePath, imageFile, {
-                contentType: imageFile.type
-            });
+            .upload(filePath, imageFile, { contentType: imageFile.type });
 
         if (uploadError) {
             toast({ title: 'Upload Error', description: uploadError.message, variant: 'destructive' });
@@ -104,6 +120,9 @@ export default function SettingsPage() {
             .getPublicUrl(filePath);
 
         if (urlData?.publicUrl) {
+            const newHistory = [...uploadedImages, urlData.publicUrl];
+            setUploadedImages(newHistory);
+            localStorage.setItem('backgroundImageHistory', JSON.stringify(newHistory));
             handleBackgroundChange('image', urlData.publicUrl);
         } else {
              toast({ title: 'Error', description: 'Could not get public URL for the uploaded image.', variant: 'destructive' });
@@ -111,6 +130,47 @@ export default function SettingsPage() {
         
         setUploading(false);
         setImageFile(null); 
+    };
+
+    const handleDeleteImage = async (imageUrlToDelete: string) => {
+        try {
+            const url = new URL(imageUrlToDelete);
+            const pathParts = url.pathname.split('/');
+            const fileName = pathParts[pathParts.length - 1];
+
+            if (!fileName) {
+                throw new Error("Could not determine filename from URL.");
+            }
+
+            const { error: deleteError } = await supabase.storage
+                .from(supabaseBucketName!)
+                .remove([fileName]);
+            
+            if(deleteError) throw deleteError;
+            
+            const newHistory = uploadedImages.filter(img => img !== imageUrlToDelete);
+            setUploadedImages(newHistory);
+            localStorage.setItem('backgroundImageHistory', JSON.stringify(newHistory));
+            toast({ title: 'Success', description: 'Image deleted from history.' });
+
+        } catch (error: any) {
+            console.error("Failed to delete image:", error);
+            toast({ title: 'Error', description: error.message || 'Could not delete image.', variant: 'destructive' });
+        }
+    };
+
+    const handleEffectChange = (type: 'blur' | 'opacity', value: number) => {
+        let newBlur = blurLevel, newOpacity = opacityLevel;
+        if(type === 'blur') {
+            setBlurLevel(value);
+            newBlur = value;
+            document.documentElement.style.setProperty('--glass-blur', `${value}px`);
+        } else {
+            setOpacityLevel(value);
+            newOpacity = value;
+            document.documentElement.style.setProperty('--glass-opacity', value.toString());
+        }
+        localStorage.setItem('glassEffectSettings', JSON.stringify({ blur: newBlur, opacity: newOpacity }));
     };
 
     return (
@@ -141,18 +201,18 @@ export default function SettingsPage() {
              <Card>
                 <CardHeader>
                     <CardTitle>Appearance</CardTitle>
-                    <CardDescription>Customize the look and feel of your application's background.</CardDescription>
+                    <CardDescription>Customize the look and feel of your application.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <Tabs defaultValue="color" className="w-full">
+                    <Tabs defaultValue="background" className="w-full">
                         <TabsList className="grid w-full grid-cols-2">
-                            <TabsTrigger value="color">Color</TabsTrigger>
-                            <TabsTrigger value="image">Image</TabsTrigger>
+                            <TabsTrigger value="background">Background</TabsTrigger>
+                            <TabsTrigger value="effects">Glass Effects</TabsTrigger>
                         </TabsList>
-                        <TabsContent value="color" className="mt-4">
-                             <div className="space-y-4">
-                                <Label>Choose a background color</Label>
-                                <div className="flex flex-wrap gap-3">
+                        <TabsContent value="background" className="mt-4 space-y-6">
+                             <div>
+                                <Label>Theme Color</Label>
+                                <div className="flex flex-wrap gap-3 mt-2">
                                     {colorOptions.map(color => (
                                         <button 
                                             key={color.value}
@@ -162,39 +222,75 @@ export default function SettingsPage() {
                                         />
                                     ))}
                                 </div>
-                                <Button variant="outline" size="sm" onClick={handleReset}>Reset to Default</Button>
                             </div>
-                        </TabsContent>
-                        <TabsContent value="image" className="mt-4">
-                            <div className="space-y-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="imageUpload">Upload a new background</Label>
-                                    <Input 
-                                        id="imageUpload"
-                                        type="file"
-                                        accept="image/*"
-                                        onChange={(e) => setImageFile(e.target.files ? e.target.files[0] : null)}
-                                    />
-                                </div>
-                                <Button onClick={handleImageUpload} disabled={uploading || !imageFile}>
-                                    {uploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                    Upload & Apply
-                                </Button>
-                                
-                                <Separator />
-
-                                <div className="space-y-2">
-                                    <Label htmlFor="imageUrl">Or use image URL (Legacy)</Label>
-                                    <div className="flex gap-2">
+                            <Separator />
+                            <div>
+                                <Label>Background Image</Label>
+                                <div className="space-y-4 mt-2">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="imageUpload" className="text-sm font-normal text-muted-foreground">Upload a new background</Label>
                                         <Input 
-                                            id="imageUrl"
-                                            placeholder="https://images.unsplash.com/..." 
-                                            value={imageUrl} 
-                                            onChange={(e) => setImageUrl(e.target.value)} 
+                                            id="imageUpload"
+                                            type="file"
+                                            accept="image/*"
+                                            onChange={(e) => setImageFile(e.target.files ? e.target.files[0] : null)}
                                         />
-                                        <Button onClick={() => handleBackgroundChange('image', imageUrl)} variant="outline">Apply URL</Button>
                                     </div>
+                                    <Button onClick={handleImageUpload} disabled={uploading || !imageFile}>
+                                        {uploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                        Upload & Apply
+                                    </Button>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="imageUrl" className="text-sm font-normal text-muted-foreground">Or use image URL</Label>
+                                        <div className="flex gap-2">
+                                            <Input 
+                                                id="imageUrl"
+                                                placeholder="https://images.unsplash.com/..." 
+                                                value={imageUrl} 
+                                                onChange={(e) => setImageUrl(e.target.value)} 
+                                            />
+                                            <Button onClick={() => handleBackgroundChange('image', imageUrl)} variant="outline">Apply URL</Button>
+                                        </div>
+                                    </div>
+                                    <Button variant="outline" size="sm" onClick={handleReset}>Reset to Default Color</Button>
                                 </div>
+                            </div>
+
+                            <Separator />
+                            
+                            <div>
+                                <Label className="flex items-center gap-2 mb-2">
+                                    <History className="h-4 w-4" />
+                                    <span>Upload History</span>
+                                </Label>
+                                {uploadedImages.length > 0 ? (
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                                        {uploadedImages.map((imgUrl) => (
+                                            <div key={imgUrl} className="relative group aspect-video">
+                                                <Image src={imgUrl} alt="Uploaded background" layout="fill" className="object-cover rounded-md" />
+                                                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-2">
+                                                    <Button size="sm" className="w-full" onClick={() => handleBackgroundChange('image', imgUrl)}>Set</Button>
+                                                    <Button size="sm" variant="destructive" className="w-full" onClick={() => handleDeleteImage(imgUrl)}>
+                                                        <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-sm text-muted-foreground">No images have been uploaded yet.</p>
+                                )}
+                            </div>
+
+                        </TabsContent>
+                        <TabsContent value="effects" className="mt-4 space-y-6">
+                            <div className="space-y-3">
+                                <Label>Background Blur ({blurLevel.toFixed(0)}px)</Label>
+                                <Slider onValueChange={(val) => handleEffectChange('blur', val[0])} value={[blurLevel]} max={50} step={1} />
+                            </div>
+                             <div className="space-y-3">
+                                <Label>Content Opacity ({opacityLevel.toFixed(2)})</Label>
+                                <Slider onValueChange={(val) => handleEffectChange('opacity', val[0])} value={[opacityLevel]} max={1} step={0.05} />
                             </div>
                         </TabsContent>
                     </Tabs>
