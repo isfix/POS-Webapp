@@ -13,7 +13,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     useEffect(() => {
     const applySavedBackground = () => {
       const savedBg = localStorage.getItem('backgroundSetting');
-      const mainElement = document.querySelector('main');
       
       if (savedBg) {
         try {
@@ -38,9 +37,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             document.body.style.backgroundSize = 'cover';
             document.body.style.backgroundPosition = 'center';
             document.body.style.backgroundAttachment = 'fixed';
-            if (mainElement) {
-                mainElement.style.backgroundColor = 'hsla(var(--card), 0.1)';
-            }
           } else {
             document.documentElement.classList.remove('has-image-background');
             document.body.style.backgroundImage = 'none';
@@ -49,22 +45,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             } else {
                 document.documentElement.style.setProperty('--background', colorMap['default']);
             }
-            if (mainElement) {
-                mainElement.style.backgroundColor = '';
-            }
           }
         } catch (e) {
             console.error("Failed to parse background settings", e);
              document.documentElement.classList.remove('has-image-background');
              document.body.style.backgroundImage = 'none';
              document.documentElement.style.setProperty('--background', '240 67% 97%');
-             if (mainElement) {
-                mainElement.style.backgroundColor = '';
-             }
-        }
-      } else {
-        if (mainElement) {
-            mainElement.style.backgroundColor = '';
         }
       }
     };

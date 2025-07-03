@@ -42,8 +42,6 @@ export default function SettingsPage() {
 
     const handleBackgroundChange = (type: 'color' | 'image', value: string) => {
         try {
-            const mainElement = document.querySelector('main');
-
             if (type === 'image') {
                 if (!value || !value.startsWith('http')) {
                     toast({ title: 'Invalid URL', description: 'Please enter a valid image URL.', variant: 'destructive' });
@@ -54,17 +52,11 @@ export default function SettingsPage() {
                 document.body.style.backgroundSize = 'cover';
                 document.body.style.backgroundPosition = 'center';
                 document.body.style.backgroundAttachment = 'fixed';
-                 if (mainElement) {
-                    mainElement.style.backgroundColor = 'hsla(var(--card), 0.1)';
-                }
             } else {
                  document.documentElement.classList.remove('has-image-background');
                  document.body.style.backgroundImage = 'none';
                 if (value in colorMap) {
                     document.documentElement.style.setProperty('--background', colorMap[value]);
-                }
-                if (mainElement) {
-                    mainElement.style.backgroundColor = ''; // Revert to class style
                 }
             }
             localStorage.setItem('backgroundSetting', JSON.stringify({ type, value }));
