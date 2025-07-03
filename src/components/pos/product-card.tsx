@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { createClient } from '@supabase/supabase-js';
 import { Plus, Minus } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
@@ -31,6 +32,17 @@ const formatCurrency = (value: number) => {
         minimumFractionDigits: 0,
     }).format(value);
 };
+
+// Initialize Supabase client
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabase = createClient(supabaseUrl as string, supabaseKey as string);
+
+// Helper function to get public image URL from Supabase storage
+function getPublicImageUrl(imagePath: string): string {
+  const { data } = supabase.storage.from('images').getPublicUrl(imagePath); // Replace 'images' with your actual bucket name
+  return data.publicUrl;
+}
 
 export function ProductCard({ item, quantity, onQuantityChange }: ProductCardProps) {
   const [inputValue, setInputValue] = useState(quantity.toString());
