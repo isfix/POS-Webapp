@@ -12,6 +12,11 @@ const MainSidebar = dynamic(() => import('@/components/layout/sidebar').then((mo
 export default function AppLayout({ children }: { children: React.ReactNode }) {
     useEffect(() => {
     const applySavedSettings = () => {
+      // Text Color
+      const defaultTextColor = '240 10% 20%'; // Default from globals.css
+      const savedTextColor = localStorage.getItem('textColorSetting');
+      document.documentElement.style.setProperty('--foreground', savedTextColor || defaultTextColor);
+
       // Background
       const savedBg = localStorage.getItem('backgroundSetting');
       if (savedBg) {

@@ -62,7 +62,7 @@ export function Header() {
       className={cn(
         'sticky z-10 flex h-16 shrink-0 items-center gap-4 px-4 transition-all duration-300 md:px-6',
         scrolled
-          ? 'top-0 border-b bg-card/95 backdrop-blur-xl shadow-lg md:top-2 md:mx-2 md:rounded-lg md:border'
+          ? 'top-0 border-b border-white/20 bg-transparent backdrop-blur-xl shadow-lg md:top-2 md:mx-2 md:rounded-lg'
           : 'top-0 rounded-t-lg border-b border-transparent'
       )}
     >

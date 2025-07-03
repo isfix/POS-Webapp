@@ -35,6 +35,17 @@ const colorOptions = [
     { name: 'Olive', value: 'olive', hsl: '70 20% 95%', className: 'bg-[hsl(70,20%,95%)]' },
 ];
 
+const textColorOptions = [
+    { name: 'Default Dark', value: 'default-dark', hsl: '240 10% 20%', className: 'bg-[hsl(240,10%,20%)]' },
+    { name: 'Soft Gray', value: 'soft-gray', hsl: '240 5% 34%', className: 'bg-[hsl(240,5%,34%)]' },
+    { name: 'Deep Navy', value: 'deep-navy', hsl: '222 47% 11%', className: 'bg-[hsl(222,47%,11%)]' },
+    { name: 'Default Light', value: 'default-light', hsl: '0 0% 98%', className: 'bg-[hsl(0,0%,98%)]' },
+    { name: 'Warm White', value: 'warm-white', hsl: '60 30% 96%', className: 'bg-[hsl(60,30%,96%)]' },
+    { name: 'Cool White', value: 'cool-white', hsl: '210 40% 98%', className: 'bg-[hsl(210,40%,98%)]' },
+];
+
+const defaultTextColor = '240 10% 20%';
+
 const colorMap = colorOptions.reduce((acc, curr) => {
     acc[curr.value] = curr.hsl;
     return acc;
@@ -173,6 +184,22 @@ export default function SettingsPage() {
         localStorage.setItem('glassEffectSettings', JSON.stringify({ blur: newBlur, opacity: newOpacity }));
     };
 
+    const handleTextColorChange = (hslValue: string) => {
+        try {
+            document.documentElement.style.setProperty('--foreground', hslValue);
+            localStorage.setItem('textColorSetting', hslValue);
+            toast({ title: 'Success', description: 'Text color updated.' });
+        } catch (e) {
+            console.error("Failed to apply text color", e);
+            toast({ title: 'Error', description: 'Could not apply text color.', variant: 'destructive' });
+        }
+    };
+
+    const handleResetTextColor = () => {
+        handleTextColorChange(defaultTextColor);
+    };
+
+
     return (
         <div className="space-y-6">
             <Card>
@@ -205,9 +232,10 @@ export default function SettingsPage() {
                 </CardHeader>
                 <CardContent>
                     <Tabs defaultValue="background" className="w-full">
-                        <TabsList className="grid w-full grid-cols-2">
+                        <TabsList className="grid w-full grid-cols-3">
                             <TabsTrigger value="background">Background</TabsTrigger>
                             <TabsTrigger value="effects">Glass Effects</TabsTrigger>
+                            <TabsTrigger value="text">Text Color</TabsTrigger>
                         </TabsList>
                         <TabsContent value="background" className="mt-4 space-y-6">
                              <div>
@@ -292,6 +320,23 @@ export default function SettingsPage() {
                                 <Label>Content Opacity ({opacityLevel.toFixed(2)})</Label>
                                 <Slider onValueChange={(val) => handleEffectChange('opacity', val[0])} value={[opacityLevel]} max={1} step={0.05} />
                             </div>
+                        </TabsContent>
+                         <TabsContent value="text" className="mt-4 space-y-6">
+                            <div>
+                                <Label>Text Color Palette</Label>
+                                <p className="text-sm text-muted-foreground">Select a color for headers and body text.</p>
+                                <div className="flex flex-wrap gap-3 mt-2">
+                                    {textColorOptions.map(color => (
+                                        <button 
+                                            key={color.value}
+                                            title={color.name}
+                                            className={cn("h-10 w-10 rounded-full border-2", color.className)}
+                                            onClick={() => handleTextColorChange(color.hsl)}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                            <Button variant="outline" size="sm" onClick={handleResetTextColor}>Reset to Default Text Color</Button>
                         </TabsContent>
                     </Tabs>
                 </CardContent>
