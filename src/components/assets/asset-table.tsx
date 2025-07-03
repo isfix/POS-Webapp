@@ -39,7 +39,7 @@ import { Timestamp } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '../ui/skeleton';
 import { ScrollArea, ScrollBar } from '../ui/scroll-area';
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseBucketName } from '@/lib/supabase';
 import * as xlsx from 'xlsx';
 
 export type Asset = {
@@ -186,7 +186,7 @@ export function AssetTable({ assets, onAddItem, onEditItem, onDeleteItem, onExpo
         const filePath = `assets/${fileName}`;
 
         const { error: uploadError } = await supabase.storage
-            .from('images')
+            .from(supabaseBucketName)
             .upload(filePath, file);
 
         if (uploadError) {
@@ -196,7 +196,7 @@ export function AssetTable({ assets, onAddItem, onEditItem, onDeleteItem, onExpo
         }
 
         const { data: urlData } = supabase.storage
-            .from('images')
+            .from(supabaseBucketName)
             .getPublicUrl(filePath);
         
         uploadedImageUrl = urlData.publicUrl;

@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/lib/supabase";
+import { supabase, supabaseBucketName } from "@/lib/supabase";
 import { Separator } from "@/components/ui/separator";
 
 const colorOptions = [
@@ -83,7 +83,7 @@ export default function SettingsPage() {
         const filePath = `backgrounds/${fileName}`;
 
         const { error: uploadError } = await supabase.storage
-            .from('images')
+            .from(supabaseBucketName)
             .upload(filePath, imageFile);
 
         if (uploadError) {
@@ -93,7 +93,7 @@ export default function SettingsPage() {
         }
 
         const { data: urlData } = supabase.storage
-            .from('images')
+            .from(supabaseBucketName)
             .getPublicUrl(filePath);
 
         handleBackgroundChange('image', urlData.publicUrl);

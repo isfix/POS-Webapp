@@ -32,7 +32,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Switch } from '../ui/switch';
 import { Badge } from '../ui/badge';
 import { ScrollArea, ScrollBar } from '../ui/scroll-area';
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseBucketName } from '@/lib/supabase';
 
 export type MenuItem = {
   id: string;
@@ -130,7 +130,7 @@ export function DataTable({ menuItems, onAddItem, onEditItem, onDeleteItem }: Da
         const filePath = `menu-items/${fileName}`;
 
         const { error: uploadError } = await supabase.storage
-            .from('images')
+            .from(supabaseBucketName)
             .upload(filePath, file);
 
         if (uploadError) {
@@ -140,7 +140,7 @@ export function DataTable({ menuItems, onAddItem, onEditItem, onDeleteItem }: Da
         }
 
         const { data: urlData } = supabase.storage
-            .from('images')
+            .from(supabaseBucketName)
             .getPublicUrl(filePath);
         
         uploadedImageUrl = urlData.publicUrl;
