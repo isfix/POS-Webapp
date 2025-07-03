@@ -186,7 +186,7 @@ export function AssetTable({ assets, onAddItem, onEditItem, onDeleteItem, onExpo
         const filePath = `assets/${fileName}`;
 
         const { error: uploadError } = await supabase.storage
-            .from(supabaseBucketName)
+            .from(supabaseBucketName!)
             .upload(filePath, file);
 
         if (uploadError) {
@@ -196,10 +196,16 @@ export function AssetTable({ assets, onAddItem, onEditItem, onDeleteItem, onExpo
         }
 
         const { data: urlData } = supabase.storage
-            .from(supabaseBucketName)
+            .from(supabaseBucketName!)
             .getPublicUrl(filePath);
         
-        uploadedImageUrl = urlData.publicUrl;
+        if (urlData?.publicUrl) {
+            uploadedImageUrl = urlData.publicUrl;
+        } else {
+            toast({ title: 'Error', description: 'Could not get public URL for the uploaded image.', variant: 'destructive' });
+            setUploading(false);
+            return;
+        }
     }
 
     const submissionData = {
