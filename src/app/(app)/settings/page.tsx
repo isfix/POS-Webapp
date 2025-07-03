@@ -26,6 +26,11 @@ const colorOptions = [
     { name: 'Sakura', value: 'sakura', hsl: '340 80% 96%', className: 'bg-[hsl(340,80%,96%)]' },
     { name: 'Mint', value: 'mint', hsl: '150 50% 96%', className: 'bg-[hsl(150,50%,96%)]' },
     { name: 'Peach', value: 'peach', hsl: '25 90% 95%', className: 'bg-[hsl(25,90%,95%)]' },
+    { name: 'Stone', value: 'stone', hsl: '240 5% 96%', className: 'bg-[hsl(240,5%,96%)]' },
+    { name: 'Rose', value: 'rose', hsl: '350 78% 97%', className: 'bg-[hsl(350,78%,97%)]' },
+    { name: 'Sky', value: 'sky', hsl: '190 80% 96%', className: 'bg-[hsl(190,80%,96%)]' },
+    { name: 'Slate', value: 'slate', hsl: '220 13% 18%', className: 'bg-[hsl(220,13%,18%)]' },
+    { name: 'Olive', value: 'olive', hsl: '70 20% 95%', className: 'bg-[hsl(70,20%,95%)]' },
 ];
 
 const colorMap = colorOptions.reduce((acc, curr) => {
