@@ -38,12 +38,6 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl as string, supabaseKey as string);
 
-// Helper function to get public image URL from Supabase storage
-function getPublicImageUrl(imagePath: string): string {
-  const { data } = supabase.storage.from('images').getPublicUrl(imagePath); // Replace 'images' with your actual bucket name
-  return data.publicUrl;
-}
-
 export function ProductCard({ item, quantity, onQuantityChange }: ProductCardProps) {
   const [inputValue, setInputValue] = useState(quantity.toString());
 
@@ -78,12 +72,19 @@ export function ProductCard({ item, quantity, onQuantityChange }: ProductCardPro
       <div>
         <CardContent className="p-0">
           <Image
-            src={item.imageUrl || `https://placehold.co/300x200.png`}
+            src={item.imageUrl || 'https://placehold.co/300x200.png'}
             data-ai-hint={`${item.category} ${item.name}`}
             alt={item.name}
             width={300}
             height={200}
             className="w-full h-auto aspect-[3/2] object-cover rounded-t-lg"
+            unoptimized
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              if (target.src !== 'https://placehold.co/300x200.png') {
+                target.src = 'https://placehold.co/300x200.png';
+              }
+            }}
           />
         </CardContent>
         <CardHeader className="p-3">
