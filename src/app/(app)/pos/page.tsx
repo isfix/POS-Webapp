@@ -51,7 +51,7 @@ export default function PosPage() {
     });
 
     return () => unsubscribe();
-  }, [toast]);
+  }, []);
   
   const filteredMenuItems = useMemo(() => {
       return menuItems.filter(item => 
