@@ -39,6 +39,7 @@ export const SIDENAV_ITEMS = [
       { title: 'End of Day', path: '/reports/end-of-day', icon: <CalendarCheck size={iconSize} /> },
       { title: 'End of Month', path: '/reports/end-of-month', icon: <BarChart3 size={iconSize} /> },
       { title: 'Daily Sales', path: '/reports/daily-sales', icon: <Coins size={iconSize} /> },
+      { title: 'Financial Statements', path: '/reports/financial-statements', icon: <BookText size={iconSize} /> },
     ],
   },
   {
@@ -49,7 +50,6 @@ export const SIDENAV_ITEMS = [
     subMenuItems: [
       { title: 'Projections', path: '/financials/projections', icon: <LineChart size={iconSize} /> },
       { title: 'Expenses', path: '/expenses', icon: <ReceiptText size={iconSize} /> },
-      { title: 'Statement', path: '/reports/financial-statements', icon: <BookText size={iconSize} /> },
     ],
   },
   {
