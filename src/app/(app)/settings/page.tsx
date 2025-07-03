@@ -84,7 +84,9 @@ export default function SettingsPage() {
 
         const { error: uploadError } = await supabase.storage
             .from(supabaseBucketName!)
-            .upload(filePath, imageFile);
+            .upload(filePath, imageFile, {
+                contentType: imageFile.type
+            });
 
         if (uploadError) {
             toast({ title: 'Upload Error', description: uploadError.message, variant: 'destructive' });

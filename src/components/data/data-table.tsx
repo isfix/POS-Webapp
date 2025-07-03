@@ -131,7 +131,9 @@ export function DataTable({ menuItems, onAddItem, onEditItem, onDeleteItem }: Da
 
         const { error: uploadError } = await supabase.storage
             .from(supabaseBucketName!)
-            .upload(filePath, file);
+            .upload(filePath, file, {
+                contentType: file.type
+            });
 
         if (uploadError) {
             toast({ title: 'Upload Error', description: uploadError.message, variant: 'destructive' });
