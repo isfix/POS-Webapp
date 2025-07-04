@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { format } from "date-fns";
 import {
   Table,
   TableBody,
@@ -10,7 +11,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Pencil, Trash2, MoreHorizontal, PlusCircle, Loader2 } from 'lucide-react';
+import { Pencil, Trash2, MoreHorizontal, PlusCircle, Loader2, FileDown, Search, Filter, Image as ImageIcon } from 'lucide-react';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -33,6 +34,9 @@ import { Switch } from '../ui/switch';
 import { Badge } from '../ui/badge';
 import { ScrollArea, ScrollBar } from '../ui/scroll-area';
 import { supabase, supabaseBucketName } from '@/lib/supabase';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import * as xlsx from 'xlsx';
+
 
 export type MenuItem = {
   id: string;
@@ -80,6 +84,32 @@ export function DataTable({ menuItems, onAddItem, onEditItem, onDeleteItem }: Da
   const [uploading, setUploading] = useState(false);
   const { toast } = useToast();
 
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  const menuCategories = useMemo(() => {
+    return [...new Set(menuItems.map(item => item.category))];
+  }, [menuItems]);
+
+  const filteredMenuItems = useMemo(() => {
+    return menuItems.filter(item => {
+      const categoryMatch = categoryFilter === 'all' || item.category === categoryFilter;
+      const searchMatch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
+      return categoryMatch && searchMatch;
+    });
+  }, [menuItems, categoryFilter, searchQuery]);
+  
+  useEffect(() => {
+    if (formData.imageFile) {
+      const url = URL.createObjectURL(formData.imageFile);
+      setPreviewUrl(url);
+      return () => URL.revokeObjectURL(url);
+    }
+    setPreviewUrl(null);
+  }, [formData.imageFile]);
+
+
   const handleOpenForm = (item: MenuItem | null = null) => {
     if (item) {
         setEditingItem(item);
@@ -101,13 +131,15 @@ export function DataTable({ menuItems, onAddItem, onEditItem, onDeleteItem }: Da
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value, files } = e.target;
-    if (name === 'imageFile' && files) {
-        setFormData((prev) => ({ ...prev, imageFile: files[0] }));
-    } else {
-        setFormData((prev) => ({ ...prev, [name]: value }));
-    }
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
   }
+  
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setFormData((prev) => ({ ...prev, imageFile: e.target.files![0] }));
+    }
+  };
 
   const handleSwitchChange = (checked: boolean) => {
     setFormData((prev) => ({ ...prev, availability: checked }));
@@ -174,20 +206,69 @@ export function DataTable({ menuItems, onAddItem, onEditItem, onDeleteItem }: Da
     setIsFormOpen(false);
   }
 
+  const handleExport = () => {
+    if (filteredMenuItems.length === 0) {
+      toast({ title: 'No Data', description: 'There is nothing to export.', variant: 'default' });
+      return;
+    }
+    toast({ title: 'Exporting...', description: 'Your Excel file is being generated.' });
+
+    const dataToExport = filteredMenuItems.map(item => ({
+      "Name": item.name,
+      "Category": item.category,
+      "Cost (Rp)": item.costPrice || 0,
+      "Price (Rp)": item.price,
+      "Availability": item.availability ? 'Available' : 'Unavailable',
+      "Ingredients": item.ingredients?.join(', '),
+      "Image URL": item.imageUrl,
+    }));
+
+    const ws = xlsx.utils.json_to_sheet(dataToExport);
+    const wb = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(wb, ws, "Menu Items");
+    xlsx.writeFile(wb, "BrewFlow_MenuItems.xlsx");
+  };
+
   return (
     <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <Card>
-            <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <CardHeader className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
                     <CardTitle>Menu Items</CardTitle>
                     <CardDescription>View, edit, or delete menu items.</CardDescription>
                 </div>
-                <Button onClick={() => handleOpenForm()} className="w-full sm:w-auto">
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Add Item
-                </Button>
+                 <div className="flex flex-col sm:flex-row items-center gap-2">
+                    <Button onClick={() => handleOpenForm()} className="w-full sm:w-auto">
+                        <PlusCircle className="mr-2 h-4 w-4" /> Add Item
+                    </Button>
+                    <Button variant="outline" onClick={handleExport} className="w-full sm:w-auto">
+                        <FileDown className="mr-2 h-4 w-4" /> Export
+                    </Button>
+                </div>
             </CardHeader>
             <CardContent>
+                <div className="flex flex-col md:flex-row items-center gap-4 mb-4 p-4 bg-muted/50 rounded-lg">
+                    <div className="relative flex-1 w-full">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                        <Input
+                            placeholder="Search menu items..."
+                            className="pl-10"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                    </div>
+                     <div className="flex items-center gap-2 text-sm font-semibold text-nowrap">
+                        <Filter className="h-4 w-4" />
+                        Filter:
+                    </div>
+                    <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                        <SelectTrigger className="w-full md:w-[240px]"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Categories</SelectItem>
+                            {menuCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                </div>
                 <ScrollArea className="w-full whitespace-nowrap rounded-md border">
                     <Table>
                         <TableHeader className="bg-accent">
@@ -201,7 +282,7 @@ export function DataTable({ menuItems, onAddItem, onEditItem, onDeleteItem }: Da
                         </TableRow>
                         </TableHeader>
                         <TableBody>
-                        {menuItems.map((item) => (
+                        {filteredMenuItems.map((item) => (
                             <TableRow key={item.id} className="[&_td:not(:last-child)]:border-r">
                             <TableCell className="font-medium">{item.name}</TableCell>
                             <TableCell>{item.category}</TableCell>
@@ -246,7 +327,7 @@ export function DataTable({ menuItems, onAddItem, onEditItem, onDeleteItem }: Da
                 Enter the details for the item. Click save when you're done.
                 </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
+            <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto pr-4">
                 <div className="space-y-2">
                     <Label htmlFor="name">Name</Label>
                     <Input id="name" name="name" value={formData.name} onChange={handleInputChange} placeholder="e.g. Americano"/>
@@ -267,10 +348,29 @@ export function DataTable({ menuItems, onAddItem, onEditItem, onDeleteItem }: Da
                 </div>
                  <div className="space-y-2">
                     <Label htmlFor="imageFile">Image</Label>
-                    <Input id="imageFile" name="imageFile" type="file" accept="image/*" onChange={handleInputChange} />
-                    {formData.imageUrl && !formData.imageFile && (
-                        <p className="text-xs text-muted-foreground">Current image is set. Upload a new file to replace it.</p>
-                    )}
+                     <div className="mt-2 flex items-center justify-center rounded-lg border border-dashed border-input p-6">
+                        {(previewUrl || formData.imageUrl) ? (
+                             <div className="relative group w-32 h-32">
+                                <img src={previewUrl || formData.imageUrl} alt="Preview" className="h-full w-full object-cover rounded-md" />
+                                <label htmlFor="imageFile" className="absolute inset-0 flex items-center justify-center bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer rounded-md">
+                                    Change
+                                </label>
+                                 <Input id="imageFile" name="imageFile" type="file" className="sr-only" accept="image/*" onChange={handleImageChange}/>
+                            </div>
+                        ) : (
+                            <div className="text-center">
+                                <ImageIcon className="mx-auto h-12 w-12 text-muted-foreground" />
+                                <div className="mt-4 flex text-sm leading-6 text-muted-foreground">
+                                    <label htmlFor="imageFile" className="relative cursor-pointer rounded-md bg-background font-semibold text-primary focus-within:outline-none focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 hover:text-primary/80">
+                                        <span>Upload a file</span>
+                                        <Input id="imageFile" name="imageFile" type="file" className="sr-only" accept="image/*" onChange={handleImageChange}/>
+                                    </label>
+                                    <p className="pl-1">or drag and drop</p>
+                                </div>
+                                <p className="text-xs leading-5 text-muted-foreground">PNG, JPG up to 2MB</p>
+                            </div>
+                        )}
+                    </div>
                 </div>
                  <div className="space-y-2">
                     <Label htmlFor="ingredients">Ingredients</Label>

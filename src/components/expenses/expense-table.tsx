@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { format } from "date-fns";
+import * as xlsx from 'xlsx';
 import {
   Table,
   TableBody,
@@ -11,7 +12,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Pencil, Trash2, MoreHorizontal, PlusCircle, Calendar as CalendarIcon, Filter, Search } from 'lucide-react';
+import { Pencil, Trash2, MoreHorizontal, PlusCircle, Calendar as CalendarIcon, Filter, Search, FileDown } from 'lucide-react';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -96,8 +97,6 @@ const formatCurrency = (value: number) => {
 
 export function ExpenseTable({ expenses, onAddItem, onEditItem, onDeleteItem, loading }: DataTableProps) {
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
-  const [itemToDelete, setItemToDelete] = useState<Expense | null>(null);
   const [editingItem, setEditingItem] = useState<Expense | null>(null);
   const [formData, setFormData] = useState<ItemFormData>(emptyFormState);
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -129,19 +128,6 @@ export function ExpenseTable({ expenses, onAddItem, onEditItem, onDeleteItem, lo
     setIsFormOpen(true);
   };
 
-  const handleOpenDeleteAlert = (item: Expense) => {
-    setItemToDelete(item);
-    setIsDeleteAlertOpen(true);
-  }
-
-  const handleConfirmDelete = () => {
-    if (itemToDelete) {
-        onDeleteItem(itemToDelete);
-    }
-    setIsDeleteAlertOpen(false);
-    setItemToDelete(null);
-  }
-
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -170,10 +156,31 @@ export function ExpenseTable({ expenses, onAddItem, onEditItem, onDeleteItem, lo
     setIsFormOpen(false);
   };
   
+  const handleExport = () => {
+    if (filteredExpenses.length === 0) {
+        toast({ title: 'No Data', description: 'There are no expenses to export.', variant: 'default' });
+        return;
+    }
+    toast({ title: 'Exporting...', description: 'Your Excel file is being generated.' });
+
+    const dataToExport = filteredExpenses.map(item => ({
+        'Title': item.title,
+        'Category': item.category,
+        'Amount (Rp)': item.amount,
+        'Date': format(item.expenseDate.toDate(), 'PPP'),
+        'Notes': item.notes || '',
+    }));
+
+    const ws = xlsx.utils.json_to_sheet(dataToExport);
+    const wb = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(wb, ws, 'Expenses');
+    xlsx.writeFile(wb, 'BrewFlow_Expenses.xlsx');
+  };
+
   const renderTableBody = () => {
     if (loading) {
         return Array.from({ length: 5 }).map((_, index) => (
-            <TableRow key={index}>
+            <TableRow key={index} className="[&_td:not(:last-child)]:border-r">
                 <TableCell><Skeleton className="h-5 w-24" /></TableCell>
                 <TableCell><Skeleton className="h-6 w-20 rounded-full" /></TableCell>
                 <TableCell><Skeleton className="h-5 w-20" /></TableCell>
@@ -211,7 +218,7 @@ export function ExpenseTable({ expenses, onAddItem, onEditItem, onDeleteItem, lo
                         <DropdownMenuItem onClick={() => handleOpenForm(item)}>
                             <Pencil className="mr-2 h-4 w-4" /> Edit
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleOpenDeleteAlert(item)} className="text-destructive focus:text-destructive focus:bg-destructive/10">
+                        <DropdownMenuItem onClick={() => onDeleteItem(item)} className="text-destructive focus:text-destructive focus:bg-destructive/10">
                             <Trash2 className="mr-2 h-4 w-4" /> Delete
                         </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -233,30 +240,36 @@ export function ExpenseTable({ expenses, onAddItem, onEditItem, onDeleteItem, lo
                   <Button onClick={() => handleOpenForm()} className="w-full sm:w-auto">
                       <PlusCircle className="mr-2 h-4 w-4" /> Add Expense
                   </Button>
+                   <Button variant="outline" onClick={handleExport} className="w-full sm:w-auto">
+                        <FileDown className="mr-2 h-4 w-4" /> Export
+                    </Button>
               </div>
           </CardHeader>
           <CardContent>
-              <div className="flex flex-col md:flex-row items-center gap-4 mb-4 p-4 bg-muted/50 rounded-lg">
-                  <div className="relative flex-1 w-full">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                      <Input
-                          placeholder="Search by title..."
-                          className="pl-10"
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                      />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 p-4 bg-muted/50 rounded-lg">
+                  <div className="space-y-2">
+                    <Label htmlFor="search">Search by Title</Label>
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                        <Input
+                            id="search"
+                            placeholder="Search expenses..."
+                            className="pl-10"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 text-sm font-semibold text-nowrap">
-                      <Filter className="h-4 w-4" />
-                      Filter:
+                  <div className="space-y-2">
+                    <Label>Filter by Category</Label>
+                    <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Categories</SelectItem>
+                            {expenseCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
                   </div>
-                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                      <SelectTrigger className="w-full md:w-[240px]"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                          <SelectItem value="all">All Categories</SelectItem>
-                          {expenseCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
-                      </SelectContent>
-                  </Select>
               </div>
               <ScrollArea className="w-full whitespace-nowrap rounded-md border">
                   <Table>
@@ -329,22 +342,6 @@ export function ExpenseTable({ expenses, onAddItem, onEditItem, onDeleteItem, lo
             </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the expense
-              record for "{itemToDelete?.title}" and remove the data from our servers.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmDelete}>Continue</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { format } from "date-fns";
+import * as xlsx from 'xlsx';
 import {
   Table,
   TableBody,
@@ -11,7 +12,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Pencil, Trash2, MoreHorizontal, PlusCircle, Calendar as CalendarIcon, Search } from 'lucide-react';
+import { Pencil, Trash2, MoreHorizontal, PlusCircle, Calendar as CalendarIcon, Search, FileDown, Filter } from 'lucide-react';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -90,13 +91,16 @@ export function InventoryTable({ inventoryItems, onAddItem, onEditItem, onDelete
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [formData, setFormData] = useState<ItemFormData>(emptyFormState);
   const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
   const { toast } = useToast();
 
   const filteredItems = useMemo(() => {
-    return inventoryItems.filter(item => 
-        item.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [inventoryItems, searchQuery]);
+    return inventoryItems.filter(item => {
+        const categoryMatch = categoryFilter === 'all' || item.category === categoryFilter;
+        const searchMatch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
+        return categoryMatch && searchMatch;
+    });
+  }, [inventoryItems, searchQuery, categoryFilter]);
 
   const handleOpenForm = (item: InventoryItem | null = null) => {
     if (item) {
@@ -149,14 +153,39 @@ export function InventoryTable({ inventoryItems, onAddItem, onEditItem, onDelete
 
     setIsFormOpen(false);
   }
+
+  const handleExport = () => {
+    if (filteredItems.length === 0) {
+        toast({ title: 'No Data', description: 'There is no inventory to export.', variant: 'default' });
+        return;
+    }
+    toast({ title: 'Exporting...', description: 'Your Excel file is being generated.' });
+
+    const dataToExport = filteredItems.map(item => ({
+        'Name': item.name,
+        'Category': item.category,
+        'Quantity': item.quantity,
+        'Unit': item.unitType,
+        'Threshold': item.minThreshold,
+        'Cost per Unit (Rp)': item.costPerUnit,
+        'Supplier': item.supplier || 'N/A',
+        'Expires On': item.expirationDate ? format(item.expirationDate.toDate(), 'PPP') : 'N/A',
+        'Last Updated': format(item.lastUpdated.toDate(), 'PPP p'),
+    }));
+
+    const ws = xlsx.utils.json_to_sheet(dataToExport);
+    const wb = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(wb, ws, 'Inventory');
+    xlsx.writeFile(wb, 'BrewFlow_Inventory.xlsx');
+  };
   
   const renderTableBody = () => {
     if (loading) {
         return Array.from({ length: 5 }).map((_, index) => (
-            <TableRow key={index}>
+            <TableRow key={index} className="[&_td:not(:last-child)]:border-r">
                 <TableCell><Skeleton className="h-5 w-32" /></TableCell>
-                <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-                <TableCell><Skeleton className="h-5 w-16" /></TableCell>
+                <TableCell><Skeleton className="h-6 w-24 rounded-full" /></TableCell>
+                <TableCell className="text-right"><Skeleton className="h-5 w-16 ml-auto" /></TableCell>
                 <TableCell><Skeleton className="h-5 w-20" /></TableCell>
                 <TableCell><Skeleton className="h-5 w-24" /></TableCell>
                 <TableCell className="text-right"><Skeleton className="h-8 w-8 ml-auto" /></TableCell>
@@ -215,26 +244,44 @@ export function InventoryTable({ inventoryItems, onAddItem, onEditItem, onDelete
     <>
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <Card>
-            <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <CardHeader className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
                     <CardTitle>Inventory Items</CardTitle>
                     <CardDescription>View, edit, or delete inventory items.</CardDescription>
                 </div>
-                <Button onClick={() => handleOpenForm()} className="w-full sm:w-auto">
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Add Item
-                </Button>
+                 <div className="flex flex-col sm:flex-row items-center gap-2">
+                    <Button onClick={() => handleOpenForm()} className="w-full sm:w-auto">
+                        <PlusCircle className="mr-2 h-4 w-4" /> Add Item
+                    </Button>
+                    <Button variant="outline" onClick={handleExport} className="w-full sm:w-auto">
+                        <FileDown className="mr-2 h-4 w-4" /> Export
+                    </Button>
+                </div>
             </CardHeader>
             <CardContent>
-                <div className="flex items-center gap-4 mb-4 p-4 bg-muted/50 rounded-lg">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                        <Input
-                            placeholder="Search inventory by name..."
-                            className="pl-10"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 p-4 bg-muted/50 rounded-lg">
+                   <div className="space-y-2">
+                        <Label htmlFor="search">Search by Name</Label>
+                         <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                            <Input
+                                id="search"
+                                placeholder="Search inventory..."
+                                className="pl-10"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Filter by Category</Label>
+                        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Categories</SelectItem>
+                                {itemCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
                     </div>
                 </div>
                 <ScrollArea className="w-full whitespace-nowrap rounded-md border">
