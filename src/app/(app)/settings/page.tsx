@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,32 +38,39 @@ const colorOptions = [
 
 const darkTextColors = [
     { name: 'Default Dark', value: 'default-dark', hsl: '240 10% 20%' },
-    { name: 'Soft Gray', value: 'soft-gray', hsl: '240 5% 34%' },
-    { name: 'Deep Navy', value: 'deep-navy', hsl: '222 47% 11%' },
     { name: 'Graphite', value: 'graphite', hsl: '240 10% 10%' },
-    { name: 'Chocolate', value: 'chocolate', hsl: '25 25% 15%' },
+    { name: 'Deep Navy', value: 'deep-navy', hsl: '222 47% 11%' },
+    { name: 'Charcoal', value: 'charcoal', hsl: '240 5% 25%' },
     { name: 'Forest Green', value: 'forest-green', hsl: '120 25% 15%' },
+    { name: 'Espresso', value: 'espresso', hsl: '25 35% 18%' },
+    { name: 'Plum', value: 'plum', hsl: '290 25% 20%' },
+    { name: 'Midnight', value: 'midnight', hsl: '240 40% 10%' },
+    { name: 'Ink', value: 'ink', hsl: '220 50% 15%' },
 ];
 
 const lightTextColors = [
     { name: 'Default Light', value: 'default-light', hsl: '0 0% 100%' },
+    { name: 'Snow', value: 'snow', hsl: '0 0% 98%' },
     { name: 'Warm White', value: 'warm-white', hsl: '60 30% 96%' },
-    { name: 'Cool White', value: 'cool-white', hsl: '210 40% 98%' },
     { name: 'Ivory', value: 'ivory', hsl: '48 100% 95%' },
     { name: 'Light Lavender', value: 'light-lavender', hsl: '240 60% 97%' },
     { name: 'Light Rose', value: 'light-rose', hsl: '350 78% 97%' },
     { name: 'Light Mint', value: 'light-mint', hsl: '150 50% 96%' },
     { name: 'Light Peach', value: 'light-peach', hsl: '25 90% 96%' },
+    { name: 'Ghost White', value: 'ghost-white', hsl: '225 100% 98%' },
 ];
 
 const accentColorOptions = [
     { name: 'Default', value: 'default', hsl: '240 10% 40%' },
+    { name: 'Sky Blue', value: 'sky-blue', hsl: '200 80% 70%' },
     { name: 'Soft Rose', value: 'soft-rose', hsl: '350 70% 70%' },
     { name: 'Sage Green', value: 'sage-green', hsl: '145 40% 60%' },
-    { name: 'Sky Blue', value: 'sky-blue', hsl: '200 80% 70%' },
-    { name: 'Peach', value: 'peach', hsl: '30 80% 75%' },
     { name: 'Lavender', value: 'lavender', hsl: '250 60% 75%' },
-    { name: 'Soft Teal', value: 'soft-teal', hsl: '170 50% 60%' },
+    { name: 'Gold', value: 'gold', hsl: '45 80% 60%' },
+    { name: 'Coral', value: 'coral', hsl: '10 80% 65%' },
+    { name: 'Indigo', value: 'indigo', hsl: '230 70% 60%' },
+    { name: 'Mint', value: 'mint-accent', hsl: '160 60% 55%' },
+    { name: 'Crimson', value: 'crimson', hsl: '340 80% 50%' },
 ];
 
 
@@ -87,6 +95,7 @@ export default function SettingsPage() {
     const [uploadedImages, setUploadedImages] = useState<string[]>([]);
     const [blurLevel, setBlurLevel] = useState(16);
     const [opacityLevel, setOpacityLevel] = useState(0.4);
+    const [customAccent, setCustomAccent] = useState('#595973');
 
     useEffect(() => {
         const history = localStorage.getItem('backgroundImageHistory');
@@ -99,6 +108,33 @@ export default function SettingsPage() {
             setOpacityLevel(opacity);
         }
     }, []);
+    
+    function hexToHsl(hex: string): string {
+        hex = hex.replace(/^#/, '');
+
+        let r = parseInt(hex.substring(0, 2), 16) / 255;
+        let g = parseInt(hex.substring(2, 4), 16) / 255;
+        let b = parseInt(hex.substring(4, 6), 16) / 255;
+
+        let cmin = Math.min(r, g, b),
+            cmax = Math.max(r, g, b),
+            delta = cmax - cmin,
+            h = 0, s = 0, l = 0;
+
+        if (delta == 0) h = 0;
+        else if (cmax == r) h = ((g - b) / delta) % 6;
+        else if (cmax == g) h = (b - r) / delta + 2;
+        else h = (r - g) / delta + 4;
+
+        h = Math.round(h * 60);
+        if (h < 0) h += 360;
+        l = (cmax + cmin) / 2;
+        s = delta == 0 ? 0 : delta / (1 - Math.abs(2 * l - 1));
+        s = +(s * 100).toFixed(1);
+        l = +(l * 100).toFixed(1);
+
+        return `${h} ${s}% ${l}%`;
+    }
 
     const handleBackgroundChange = (type: 'color' | 'image', value: string) => {
         try {
@@ -217,6 +253,11 @@ export default function SettingsPage() {
             toast({ title: 'Error', description: `Could not apply ${toastMessage} color.`, variant: 'destructive' });
         }
     };
+    
+    const handleApplyCustomAccent = () => {
+        const hslColor = hexToHsl(customAccent);
+        handleColorChange('accentColor', ['--primary', '--ring'], hslColor, 'Accent');
+    }
 
     const renderColorPalette = (
         options: { value: string; name: string; hsl: string }[],
@@ -390,6 +431,26 @@ export default function SettingsPage() {
                                 {renderColorPalette(accentColorOptions, (hsl) => handleColorChange('accentColor', ['--primary', '--ring'], hsl, 'Accent'))}
                                 <Button variant="link" size="sm" className="px-0" onClick={() => handleColorChange('accentColor', ['--primary', '--ring'], defaultColors.accent, 'Accent')}>Reset</Button>
                             </div>
+                             <Separator />
+                             <div>
+                                <Label>Custom Accent Color</Label>
+                                 <div className="flex items-center gap-4 mt-2">
+                                     <Input 
+                                        type="color" 
+                                        value={customAccent} 
+                                        onChange={(e) => setCustomAccent(e.target.value)}
+                                        className="p-1 h-12 w-24"
+                                     />
+                                     <div className="flex items-center gap-2">
+                                        <Input
+                                            value={customAccent}
+                                            onChange={(e) => setCustomAccent(e.target.value)}
+                                            className="w-28 font-mono"
+                                        />
+                                        <Button onClick={handleApplyCustomAccent}>Apply</Button>
+                                     </div>
+                                </div>
+                             </div>
                         </TabsContent>
                     </Tabs>
                 </CardContent>
