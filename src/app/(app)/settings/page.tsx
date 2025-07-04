@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -375,14 +376,14 @@ export default function SettingsPage() {
                                     </Button>
                                     <div className="space-y-2">
                                         <Label htmlFor="imageUrl" className="text-sm font-normal text-muted-foreground">Or use image URL</Label>
-                                        <div className="flex gap-2">
+                                        <div className="flex flex-col sm:flex-row gap-2">
                                             <Input 
                                                 id="imageUrl"
                                                 placeholder="https://images.unsplash.com/..." 
                                                 value={imageUrl} 
                                                 onChange={(e) => setImageUrl(e.target.value)} 
                                             />
-                                            <Button onClick={() => handleBackgroundChange('image', imageUrl)} variant="outline">Apply URL</Button>
+                                            <Button onClick={() => handleBackgroundChange('image', imageUrl)} variant="outline" className="w-full sm:w-auto">Apply URL</Button>
                                         </div>
                                     </div>
                                     <Button variant="outline" size="sm" onClick={handleReset}>Reset to Default Color</Button>
@@ -469,18 +470,18 @@ export default function SettingsPage() {
                              <Separator />
                              <div>
                                 <Label>Custom Accent Color</Label>
-                                 <div className="flex items-center gap-4 mt-2">
+                                 <div className="flex flex-col sm:flex-row items-center gap-4 mt-2">
                                      <Input 
                                         type="color" 
                                         value={customAccent} 
                                         onChange={(e) => setCustomAccent(e.target.value)}
                                         className="p-1 h-12 w-24"
                                      />
-                                     <div className="flex items-center gap-2">
+                                     <div className="flex w-full sm:w-auto items-center gap-2">
                                         <Input
                                             value={customAccent}
                                             onChange={(e) => setCustomAccent(e.target.value)}
-                                            className="w-28 font-mono"
+                                            className="w-full sm:w-28 font-mono"
                                         />
                                         <Button onClick={handleApplyCustomAccent}>Apply</Button>
                                      </div>

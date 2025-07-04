@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -15,6 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 
 // Recent Transactions types
 type Transaction = {
@@ -243,7 +245,7 @@ export default function DashboardPage() {
                         <CardTitle>Recent Transactions</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="w-full overflow-x-auto rounded-md border">
+                        <ScrollArea className="w-full whitespace-nowrap rounded-md border">
                             <Table>
                                 <TableHeader className="bg-accent">
                                     <TableRow className="[&_th:not(:last-child)]:border-r">
@@ -258,7 +260,8 @@ export default function DashboardPage() {
                                     {renderTableBody()}
                                 </TableBody>
                             </Table>
-                        </div>
+                             <ScrollBar orientation="horizontal" />
+                        </ScrollArea>
                     </CardContent>
                 </Card>
             </div>

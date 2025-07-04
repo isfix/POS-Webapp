@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -13,6 +14,7 @@ import { startOfDay, endOfDay } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import * as xlsx from 'xlsx';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 
 type Sale = {
     id: string;
@@ -216,7 +218,7 @@ export default function DailySalesPage() {
 
             <Card>
                 <CardContent className="pt-6">
-                    <div className="w-full overflow-x-auto rounded-md border">
+                    <ScrollArea className="w-full whitespace-nowrap rounded-md border">
                         <Table>
                             <TableHeader className="bg-accent">
                                 <TableRow className="[&_th:not(:last-child)]:border-r">
@@ -231,7 +233,8 @@ export default function DailySalesPage() {
                                 {renderTableBody()}
                             </TableBody>
                         </Table>
-                    </div>
+                         <ScrollBar orientation="horizontal" />
+                    </ScrollArea>
                 </CardContent>
             </Card>
         </div>

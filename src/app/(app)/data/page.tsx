@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -258,7 +259,7 @@ export default function DataManagementPage() {
                     </div>
                 </CardHeader>
                 <CardContent>
-                    <div className="w-full overflow-x-auto rounded-md border">
+                    <ScrollArea className="w-full whitespace-nowrap rounded-md border">
                         <Table>
                             <TableHeader className="bg-accent">
                                 <TableRow className="[&_th:not(:last-child)]:border-r">
@@ -271,7 +272,8 @@ export default function DataManagementPage() {
                             {renderLogTableBody()}
                             </TableBody>
                         </Table>
-                    </div>
+                         <ScrollBar orientation="horizontal" />
+                    </ScrollArea>
                 </CardContent>
             </Card>
         </div>

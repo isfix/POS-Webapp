@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -14,6 +15,7 @@ import { generateFinancialProjection, exportProjectionToExcel, generateAiProject
 import type { ProjectionAssumptions, ProjectionResults, AiProjectionOutput } from '@/actions/financials';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 
 type OpexItem = { id: number; category: string; amount: string };
 type CapexItem = { id: number; assetName: string; cost: string; purchaseMonth: string; usefulLife: string };
@@ -219,7 +221,7 @@ export default function FinancialProjectionsPage() {
     };
 
     const renderProjectionTable = (data: { month: number; [key: string]: number }[], headers: string[]) => (
-        <div className="w-full overflow-x-auto">
+        <ScrollArea className="w-full whitespace-nowrap rounded-md border">
             <Table>
                 <TableHeader className="bg-muted/50">
                     <TableRow className="[&_th:not(:last-child)]:border-r">
@@ -238,7 +240,8 @@ export default function FinancialProjectionsPage() {
                     ))}
                 </TableBody>
             </Table>
-        </div>
+             <ScrollBar orientation="horizontal" />
+        </ScrollArea>
     );
     
     const formatBalanceSheetData = (bs: ProjectionResults['balanceSheet']) => {
@@ -274,7 +277,7 @@ export default function FinancialProjectionsPage() {
     const renderBalanceSheet = (bs: ProjectionResults['balanceSheet']) => {
         const { months, data } = formatBalanceSheetData(bs);
         return (
-             <div className="w-full overflow-x-auto">
+             <ScrollArea className="w-full whitespace-nowrap rounded-md border">
                 <Table>
                     <TableHeader className="bg-muted/50">
                         <TableRow className="[&_th:not(:last-child)]:border-r">
@@ -298,7 +301,8 @@ export default function FinancialProjectionsPage() {
                     ))}
                     </TableBody>
                 </Table>
-             </div>
+                 <ScrollBar orientation="horizontal" />
+             </ScrollArea>
         );
     };
 
@@ -371,7 +375,7 @@ export default function FinancialProjectionsPage() {
                             <Button variant="outline" size="sm" onClick={handleAddOpex}><PlusCircle className="mr-2 h-4 w-4" /> Add Row</Button>
                         </CardHeader>
                         <CardContent>
-                             <div className="w-full overflow-x-auto">
+                             <ScrollArea className="w-full whitespace-nowrap rounded-md border">
                                 <Table>
                                     <TableHeader><TableRow><TableHead>Expense Category</TableHead><TableHead>Amount (Rp)</TableHead><TableHead></TableHead></TableRow></TableHeader>
                                     <TableBody>
@@ -384,7 +388,8 @@ export default function FinancialProjectionsPage() {
                                         ))}
                                     </TableBody>
                                 </Table>
-                             </div>
+                                 <ScrollBar orientation="horizontal" />
+                             </ScrollArea>
                         </CardContent>
                     </Card>
 
@@ -394,7 +399,7 @@ export default function FinancialProjectionsPage() {
                             <Button variant="outline" size="sm" onClick={handleAddCapex}><PlusCircle className="mr-2 h-4 w-4" /> Add Row</Button>
                         </CardHeader>
                         <CardContent>
-                           <div className="w-full overflow-x-auto">
+                           <ScrollArea className="w-full whitespace-nowrap rounded-md border">
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
@@ -417,7 +422,8 @@ export default function FinancialProjectionsPage() {
                                         ))}
                                     </TableBody>
                                 </Table>
-                           </div>
+                                <ScrollBar orientation="horizontal" />
+                           </ScrollArea>
                         </CardContent>
                     </Card>
                     
