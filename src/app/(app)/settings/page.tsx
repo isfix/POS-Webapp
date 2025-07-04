@@ -93,8 +93,12 @@ export default function SettingsPage() {
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [uploading, setUploading] = useState(false);
     const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+    
     const [blurLevel, setBlurLevel] = useState(16);
     const [opacityLevel, setOpacityLevel] = useState(0.4);
+    const [shadowBlur, setShadowBlur] = useState(20);
+    const [shadowOpacity, setShadowOpacity] = useState(0.1);
+
     const [customAccent, setCustomAccent] = useState('#595973');
 
     useEffect(() => {
@@ -103,9 +107,15 @@ export default function SettingsPage() {
 
         const glassSettings = localStorage.getItem('glassEffectSettings');
         if (glassSettings) {
-            const { blur, opacity } = JSON.parse(glassSettings);
-            setBlurLevel(blur);
-            setOpacityLevel(opacity);
+            try {
+                const { blur, opacity, shadowBlur, shadowOpacity } = JSON.parse(glassSettings);
+                setBlurLevel(blur || 16);
+                setOpacityLevel(opacity || 0.4);
+                setShadowBlur(shadowBlur || 20);
+                setShadowOpacity(shadowOpacity || 0.1);
+            } catch (e) {
+                console.error("Failed to parse glass settings from localStorage", e);
+            }
         }
     }, []);
     
@@ -173,7 +183,7 @@ export default function SettingsPage() {
 
         const fileExt = imageFile.name.split('.').pop();
         const fileName = `bg-${Date.now()}.${fileExt}`;
-        const filePath = fileName;
+        const filePath = `backgrounds/${fileName}`;
 
         const { error: uploadError } = await supabase.storage
             .from(supabaseBucketName!)
@@ -206,11 +216,11 @@ export default function SettingsPage() {
         try {
             const url = new URL(imageUrlToDelete);
             const pathParts = url.pathname.split('/');
-            const fileName = pathParts[pathParts.length - 1];
+            const objectPath = pathParts.slice(pathParts.indexOf(supabaseBucketName!) + 1).join('/');
 
-            if (!fileName) throw new Error("Could not determine filename from URL.");
+            if (!objectPath) throw new Error("Could not determine object path from URL.");
 
-            const { error: deleteError } = await supabase.storage.from(supabaseBucketName!).remove([fileName]);
+            const { error: deleteError } = await supabase.storage.from(supabaseBucketName!).remove([objectPath]);
             
             if(deleteError) throw deleteError;
             
@@ -225,18 +235,35 @@ export default function SettingsPage() {
         }
     };
 
-    const handleEffectChange = (type: 'blur' | 'opacity', value: number) => {
-        let newBlur = blurLevel, newOpacity = opacityLevel;
+    const handleEffectChange = (type: 'blur' | 'opacity' | 'shadowBlur' | 'shadowOpacity', value: number) => {
+        let newBlur = blurLevel,
+            newOpacity = opacityLevel,
+            newShadowBlur = shadowBlur,
+            newShadowOpacity = shadowOpacity;
+
         if (type === 'blur') {
             setBlurLevel(value);
             newBlur = value;
             document.documentElement.style.setProperty('--glass-blur', `${value}px`);
-        } else {
+        } else if (type === 'opacity') {
             setOpacityLevel(value);
             newOpacity = value;
             document.documentElement.style.setProperty('--glass-opacity', value.toString());
+        } else if (type === 'shadowBlur') {
+            setShadowBlur(value);
+            newShadowBlur = value;
+            document.documentElement.style.setProperty('--shadow-blur', `${value}px`);
+        } else if (type === 'shadowOpacity') {
+            setShadowOpacity(value);
+            newShadowOpacity = value;
+            document.documentElement.style.setProperty('--shadow-opacity', value.toString());
         }
-        localStorage.setItem('glassEffectSettings', JSON.stringify({ blur: newBlur, opacity: newOpacity }));
+        localStorage.setItem('glassEffectSettings', JSON.stringify({ 
+            blur: newBlur, 
+            opacity: newOpacity,
+            shadowBlur: newShadowBlur,
+            shadowOpacity: newShadowOpacity
+        }));
     };
 
     const handleColorChange = (storageKey: string, variable: string | string[], hslValue: string, toastMessage: string) => {
@@ -316,7 +343,6 @@ export default function SettingsPage() {
                         </TabsList>
 
                         <TabsContent value="background" className="mt-4 space-y-6">
-                            {/* Background content from before */}
                              <div>
                                 <Label>Theme Color</Label>
                                 <div className="flex flex-wrap gap-3 mt-2">
@@ -398,6 +424,15 @@ export default function SettingsPage() {
                              <div className="space-y-3">
                                 <Label>Content Opacity ({opacityLevel.toFixed(2)})</Label>
                                 <Slider onValueChange={(val) => handleEffectChange('opacity', val[0])} value={[opacityLevel]} max={1} step={0.05} />
+                            </div>
+                            <Separator/>
+                            <div className="space-y-3">
+                                <Label>Shadow Blur ({shadowBlur.toFixed(0)}px)</Label>
+                                <Slider onValueChange={(val) => handleEffectChange('shadowBlur', val[0])} value={[shadowBlur]} max={80} step={1} />
+                            </div>
+                             <div className="space-y-3">
+                                <Label>Shadow Opacity ({shadowOpacity.toFixed(2)})</Label>
+                                <Slider onValueChange={(val) => handleEffectChange('shadowOpacity', val[0])} value={[shadowOpacity]} max={0.5} step={0.01} />
                             </div>
                         </TabsContent>
                         

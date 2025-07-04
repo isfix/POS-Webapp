@@ -17,6 +17,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       const defaultMutedText = '240 10% 45%';
       const defaultInvertedText = '0 0% 100%';
       const defaultAccent = '240 10% 40%';
+      const defaultBg = '240 67% 97%';
 
       // Text Colors
       const savedMainText = localStorage.getItem('mainTextColor');
@@ -30,8 +31,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       // Accent Color
       const savedAccentColor = localStorage.getItem('accentColor');
-      document.documentElement.style.setProperty('--primary', savedAccentColor || defaultAccent);
-      document.documentElement.style.setProperty('--ring', savedAccentColor || defaultAccent);
+      const accentToApply = savedAccentColor || defaultAccent;
+      document.documentElement.style.setProperty('--primary', accentToApply);
+      document.documentElement.style.setProperty('--ring', accentToApply);
 
 
       // Background
@@ -54,20 +56,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             document.body.style.backgroundSize = 'cover';
             document.body.style.backgroundPosition = 'center';
             document.body.style.backgroundAttachment = 'fixed';
+            document.documentElement.style.setProperty('--background', 'transparent');
           } else {
             document.documentElement.classList.remove('has-image-background');
             document.body.style.backgroundImage = 'none';
             if (type === 'color' && value in colorMap) {
                 document.documentElement.style.setProperty('--background', colorMap[value]);
             } else {
-                document.documentElement.style.setProperty('--background', colorMap['default']);
+                document.documentElement.style.setProperty('--background', defaultBg);
             }
           }
         } catch (e) {
             console.error("Failed to parse background settings", e);
              document.documentElement.classList.remove('has-image-background');
              document.body.style.backgroundImage = 'none';
-             document.documentElement.style.setProperty('--background', '240 67% 97%');
+             document.documentElement.style.setProperty('--background', defaultBg);
         }
       }
 
@@ -75,13 +78,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       const savedGlass = localStorage.getItem('glassEffectSettings');
       if (savedGlass) {
         try {
-          const { blur, opacity } = JSON.parse(savedGlass);
-          document.documentElement.style.setProperty('--glass-blur', `${blur}px`);
-          document.documentElement.style.setProperty('--glass-opacity', opacity);
+          const { blur, opacity, shadowBlur, shadowOpacity } = JSON.parse(savedGlass);
+          document.documentElement.style.setProperty('--glass-blur', `${blur || 16}px`);
+          document.documentElement.style.setProperty('--glass-opacity', opacity || 0.4);
+          document.documentElement.style.setProperty('--shadow-blur', `${shadowBlur || 20}px`);
+          document.documentElement.style.setProperty('--shadow-opacity', shadowOpacity || 0.1);
         } catch(e) {
           console.error("Failed to parse glass settings", e);
           document.documentElement.style.setProperty('--glass-blur', `16px`);
           document.documentElement.style.setProperty('--glass-opacity', '0.4');
+          document.documentElement.style.setProperty('--shadow-blur', '20px');
+          document.documentElement.style.setProperty('--shadow-opacity', '0.1');
         }
       }
     };

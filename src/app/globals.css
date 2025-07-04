@@ -10,7 +10,7 @@
     --card-foreground: var(--foreground);
     --popover: 255 100% 100%;
     --popover-foreground: var(--foreground);
-    --primary: 240 10% 40%; /* #595973 - Dark Muted Grape */
+    --primary: 250 60% 75%;
     --primary-foreground: 0 0% 100%;
     --secondary: 0 0% 94%; /* #F0F0F0 - Light Gray */
     --secondary-foreground: var(--foreground);
@@ -22,7 +22,7 @@
     --destructive-foreground: 0 0% 98%;
     --border: 240 5% 85%;
     --input: 240 5% 90%;
-    --ring: 240 10% 40%;
+    --ring: 250 60% 75%;
 
     --radius: 0.75rem;
 
@@ -43,6 +43,8 @@
 
     --glass-blur: 16px;
     --glass-opacity: 0.4;
+    --shadow-blur: 20px;
+    --shadow-opacity: 0.1;
   }
   .dark {
     --background: 240 10% 5%;
@@ -109,6 +111,7 @@
     .glass-pane {
         background-color: hsla(var(--card), var(--glass-opacity));
         backdrop-filter: blur(var(--glass-blur));
-        @apply border border-white/20 shadow-glass;
+        box-shadow: 0 4px var(--shadow-blur) rgba(0, 0, 0, var(--shadow-opacity));
+        @apply border border-white/20;
     }
 }
