@@ -51,16 +51,18 @@ const lightTextColors = [
     { name: 'Ivory', value: 'ivory', hsl: '48 100% 95%' },
     { name: 'Light Lavender', value: 'light-lavender', hsl: '240 60% 97%' },
     { name: 'Light Rose', value: 'light-rose', hsl: '350 78% 97%' },
+    { name: 'Light Mint', value: 'light-mint', hsl: '150 50% 96%' },
+    { name: 'Light Peach', value: 'light-peach', hsl: '25 90% 96%' },
 ];
 
 const accentColorOptions = [
     { name: 'Default', value: 'default', hsl: '240 10% 40%' },
-    { name: 'Crimson Red', value: 'crimson-red', hsl: '0 72% 51%' },
-    { name: 'Emerald Green', value: 'emerald-green', hsl: '145 63% 42%' },
-    { name: 'Sapphire Blue', value: 'sapphire-blue', hsl: '217 91% 60%' },
-    { name: 'Amber', value: 'amber', hsl: '45 93% 47%' },
-    { name: 'Violet', value: 'violet', hsl: '262 83% 58%' },
-    { name: 'Teal', value: 'teal', hsl: '170 80% 40%' },
+    { name: 'Soft Rose', value: 'soft-rose', hsl: '350 70% 70%' },
+    { name: 'Sage Green', value: 'sage-green', hsl: '145 40% 60%' },
+    { name: 'Sky Blue', value: 'sky-blue', hsl: '200 80% 70%' },
+    { name: 'Peach', value: 'peach', hsl: '30 80% 75%' },
+    { name: 'Lavender', value: 'lavender', hsl: '250 60% 75%' },
+    { name: 'Soft Teal', value: 'soft-teal', hsl: '170 50% 60%' },
 ];
 
 
