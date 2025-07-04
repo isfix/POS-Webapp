@@ -114,4 +114,7 @@
         box-shadow: 0 4px var(--shadow-blur) rgba(0, 0, 0, var(--shadow-opacity));
         @apply border border-white/20;
     }
+    .custom-shadow {
+      box-shadow: 0 4px var(--shadow-blur) rgba(0, 0, 0, var(--shadow-opacity));
+    }
 }
