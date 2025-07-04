@@ -12,10 +12,27 @@ const MainSidebar = dynamic(() => import('@/components/layout/sidebar').then((mo
 export default function AppLayout({ children }: { children: React.ReactNode }) {
     useEffect(() => {
     const applySavedSettings = () => {
-      // Text Color
-      const defaultTextColor = '240 10% 20%'; // Default from globals.css
-      const savedTextColor = localStorage.getItem('textColorSetting');
-      document.documentElement.style.setProperty('--foreground', savedTextColor || defaultTextColor);
+      // Default colors from globals.css for fallback
+      const defaultMainText = '240 10% 20%';
+      const defaultMutedText = '240 10% 45%';
+      const defaultInvertedText = '0 0% 100%';
+      const defaultAccent = '240 10% 40%';
+
+      // Text Colors
+      const savedMainText = localStorage.getItem('mainTextColor');
+      const savedMutedText = localStorage.getItem('mutedTextColor');
+      const savedInvertedText = localStorage.getItem('invertedTextColor');
+      
+      document.documentElement.style.setProperty('--foreground', savedMainText || defaultMainText);
+      document.documentElement.style.setProperty('--muted-foreground', savedMutedText || defaultMutedText);
+      document.documentElement.style.setProperty('--primary-foreground', savedInvertedText || defaultInvertedText);
+      document.documentElement.style.setProperty('--destructive-foreground', savedInvertedText || defaultInvertedText);
+
+      // Accent Color
+      const savedAccentColor = localStorage.getItem('accentColor');
+      document.documentElement.style.setProperty('--primary', savedAccentColor || defaultAccent);
+      document.documentElement.style.setProperty('--ring', savedAccentColor || defaultAccent);
+
 
       // Background
       const savedBg = localStorage.getItem('backgroundSetting');

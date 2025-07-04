@@ -35,21 +35,46 @@ const colorOptions = [
     { name: 'Olive', value: 'olive', hsl: '70 20% 95%', className: 'bg-[hsl(70,20%,95%)]' },
 ];
 
-const textColorOptions = [
-    { name: 'Default Dark', value: 'default-dark', hsl: '240 10% 20%', className: 'bg-[hsl(240,10%,20%)]' },
-    { name: 'Soft Gray', value: 'soft-gray', hsl: '240 5% 34%', className: 'bg-[hsl(240,5%,34%)]' },
-    { name: 'Deep Navy', value: 'deep-navy', hsl: '222 47% 11%', className: 'bg-[hsl(222,47%,11%)]' },
-    { name: 'Default Light', value: 'default-light', hsl: '0 0% 98%', className: 'bg-[hsl(0,0%,98%)]' },
-    { name: 'Warm White', value: 'warm-white', hsl: '60 30% 96%', className: 'bg-[hsl(60,30%,96%)]' },
-    { name: 'Cool White', value: 'cool-white', hsl: '210 40% 98%', className: 'bg-[hsl(210,40%,98%)]' },
+const darkTextColors = [
+    { name: 'Default Dark', value: 'default-dark', hsl: '240 10% 20%' },
+    { name: 'Soft Gray', value: 'soft-gray', hsl: '240 5% 34%' },
+    { name: 'Deep Navy', value: 'deep-navy', hsl: '222 47% 11%' },
+    { name: 'Graphite', value: 'graphite', hsl: '240 10% 10%' },
+    { name: 'Chocolate', value: 'chocolate', hsl: '25 25% 15%' },
+    { name: 'Forest Green', value: 'forest-green', hsl: '120 25% 15%' },
 ];
 
-const defaultTextColor = '240 10% 20%';
+const lightTextColors = [
+    { name: 'Default Light', value: 'default-light', hsl: '0 0% 100%' },
+    { name: 'Warm White', value: 'warm-white', hsl: '60 30% 96%' },
+    { name: 'Cool White', value: 'cool-white', hsl: '210 40% 98%' },
+    { name: 'Ivory', value: 'ivory', hsl: '48 100% 95%' },
+    { name: 'Light Lavender', value: 'light-lavender', hsl: '240 60% 97%' },
+    { name: 'Light Rose', value: 'light-rose', hsl: '350 78% 97%' },
+];
+
+const accentColorOptions = [
+    { name: 'Default', value: 'default', hsl: '240 10% 40%' },
+    { name: 'Crimson Red', value: 'crimson-red', hsl: '0 72% 51%' },
+    { name: 'Emerald Green', value: 'emerald-green', hsl: '145 63% 42%' },
+    { name: 'Sapphire Blue', value: 'sapphire-blue', hsl: '217 91% 60%' },
+    { name: 'Amber', value: 'amber', hsl: '45 93% 47%' },
+    { name: 'Violet', value: 'violet', hsl: '262 83% 58%' },
+    { name: 'Teal', value: 'teal', hsl: '170 80% 40%' },
+];
+
 
 const colorMap = colorOptions.reduce((acc, curr) => {
     acc[curr.value] = curr.hsl;
     return acc;
 }, {} as Record<string, string>);
+
+const defaultColors = {
+    mainText: '240 10% 20%',
+    mutedText: '240 10% 45%',
+    invertedText: '0 0% 100%',
+    accent: '240 10% 40%',
+};
 
 export default function SettingsPage() {
     const { user, loading } = useAuth();
@@ -57,20 +82,16 @@ export default function SettingsPage() {
     const [imageUrl, setImageUrl] = useState('');
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [uploading, setUploading] = useState(false);
-
     const [uploadedImages, setUploadedImages] = useState<string[]>([]);
     const [blurLevel, setBlurLevel] = useState(16);
     const [opacityLevel, setOpacityLevel] = useState(0.4);
 
     useEffect(() => {
-        // Load image history
         const history = localStorage.getItem('backgroundImageHistory');
-        if (history) {
-            setUploadedImages(JSON.parse(history));
-        }
-        // Load glass effects
+        if (history) setUploadedImages(JSON.parse(history));
+
         const glassSettings = localStorage.getItem('glassEffectSettings');
-        if(glassSettings) {
+        if (glassSettings) {
             const { blur, opacity } = JSON.parse(glassSettings);
             setBlurLevel(blur);
             setOpacityLevel(opacity);
@@ -87,8 +108,8 @@ export default function SettingsPage() {
                 document.documentElement.classList.add('has-image-background');
                 document.body.style.backgroundImage = `url('${value}')`;
             } else {
-                 document.documentElement.classList.remove('has-image-background');
-                 document.body.style.backgroundImage = 'none';
+                document.documentElement.classList.remove('has-image-background');
+                document.body.style.backgroundImage = 'none';
                 if (value in colorMap) {
                     document.documentElement.style.setProperty('--background', colorMap[value]);
                 }
@@ -149,13 +170,9 @@ export default function SettingsPage() {
             const pathParts = url.pathname.split('/');
             const fileName = pathParts[pathParts.length - 1];
 
-            if (!fileName) {
-                throw new Error("Could not determine filename from URL.");
-            }
+            if (!fileName) throw new Error("Could not determine filename from URL.");
 
-            const { error: deleteError } = await supabase.storage
-                .from(supabaseBucketName!)
-                .remove([fileName]);
+            const { error: deleteError } = await supabase.storage.from(supabaseBucketName!).remove([fileName]);
             
             if(deleteError) throw deleteError;
             
@@ -172,7 +189,7 @@ export default function SettingsPage() {
 
     const handleEffectChange = (type: 'blur' | 'opacity', value: number) => {
         let newBlur = blurLevel, newOpacity = opacityLevel;
-        if(type === 'blur') {
+        if (type === 'blur') {
             setBlurLevel(value);
             newBlur = value;
             document.documentElement.style.setProperty('--glass-blur', `${value}px`);
@@ -184,21 +201,37 @@ export default function SettingsPage() {
         localStorage.setItem('glassEffectSettings', JSON.stringify({ blur: newBlur, opacity: newOpacity }));
     };
 
-    const handleTextColorChange = (hslValue: string) => {
-        try {
-            document.documentElement.style.setProperty('--foreground', hslValue);
-            localStorage.setItem('textColorSetting', hslValue);
-            toast({ title: 'Success', description: 'Text color updated.' });
+    const handleColorChange = (storageKey: string, variable: string | string[], hslValue: string, toastMessage: string) => {
+         try {
+            if (Array.isArray(variable)) {
+                variable.forEach(v => document.documentElement.style.setProperty(v, hslValue));
+            } else {
+                document.documentElement.style.setProperty(variable, hslValue);
+            }
+            localStorage.setItem(storageKey, hslValue);
+            toast({ title: 'Success', description: `${toastMessage} color updated.` });
         } catch (e) {
-            console.error("Failed to apply text color", e);
-            toast({ title: 'Error', description: 'Could not apply text color.', variant: 'destructive' });
+            console.error(`Failed to apply ${toastMessage} color`, e);
+            toast({ title: 'Error', description: `Could not apply ${toastMessage} color.`, variant: 'destructive' });
         }
     };
 
-    const handleResetTextColor = () => {
-        handleTextColorChange(defaultTextColor);
-    };
-
+    const renderColorPalette = (
+        options: { value: string; name: string; hsl: string }[],
+        onSelect: (hsl: string) => void
+    ) => (
+        <div className="flex flex-wrap gap-3 mt-2">
+            {options.map(color => (
+                <button
+                    key={color.value}
+                    title={color.name}
+                    className={cn("h-10 w-10 rounded-full border-2 bg-[--swatch-color]")}
+                    style={{ '--swatch-color': `hsl(${color.hsl})` } as React.CSSProperties}
+                    onClick={() => onSelect(color.hsl)}
+                />
+            ))}
+        </div>
+    );
 
     return (
         <div className="space-y-6">
@@ -232,12 +265,15 @@ export default function SettingsPage() {
                 </CardHeader>
                 <CardContent>
                     <Tabs defaultValue="background" className="w-full">
-                        <TabsList className="grid w-full grid-cols-3">
+                        <TabsList className="grid w-full grid-cols-4">
                             <TabsTrigger value="background">Background</TabsTrigger>
                             <TabsTrigger value="effects">Glass Effects</TabsTrigger>
-                            <TabsTrigger value="text">Text Color</TabsTrigger>
+                            <TabsTrigger value="text">Text</TabsTrigger>
+                            <TabsTrigger value="accent">Accents</TabsTrigger>
                         </TabsList>
+
                         <TabsContent value="background" className="mt-4 space-y-6">
+                            {/* Background content from before */}
                              <div>
                                 <Label>Theme Color</Label>
                                 <div className="flex flex-wrap gap-3 mt-2">
@@ -309,8 +345,8 @@ export default function SettingsPage() {
                                     <p className="text-sm text-muted-foreground">No images have been uploaded yet.</p>
                                 )}
                             </div>
-
                         </TabsContent>
+
                         <TabsContent value="effects" className="mt-4 space-y-6">
                             <div className="space-y-3">
                                 <Label>Background Blur ({blurLevel.toFixed(0)}px)</Label>
@@ -321,22 +357,37 @@ export default function SettingsPage() {
                                 <Slider onValueChange={(val) => handleEffectChange('opacity', val[0])} value={[opacityLevel]} max={1} step={0.05} />
                             </div>
                         </TabsContent>
-                         <TabsContent value="text" className="mt-4 space-y-6">
+                        
+                         <TabsContent value="text" className="mt-4 space-y-8">
                             <div>
-                                <Label>Text Color Palette</Label>
-                                <p className="text-sm text-muted-foreground">Select a color for headers and body text.</p>
-                                <div className="flex flex-wrap gap-3 mt-2">
-                                    {textColorOptions.map(color => (
-                                        <button 
-                                            key={color.value}
-                                            title={color.name}
-                                            className={cn("h-10 w-10 rounded-full border-2", color.className)}
-                                            onClick={() => handleTextColorChange(color.hsl)}
-                                        />
-                                    ))}
-                                </div>
+                                <Label>Main Content Text</Label>
+                                <p className="text-sm text-muted-foreground">Used for body text, titles, and general content.</p>
+                                {renderColorPalette(darkTextColors, (hsl) => handleColorChange('mainTextColor', '--foreground', hsl, 'Main text'))}
+                                <Button variant="link" size="sm" className="px-0" onClick={() => handleColorChange('mainTextColor', '--foreground', defaultColors.mainText, 'Main text')}>Reset</Button>
                             </div>
-                            <Button variant="outline" size="sm" onClick={handleResetTextColor}>Reset to Default Text Color</Button>
+                             <Separator />
+                             <div>
+                                <Label>Muted Text</Label>
+                                <p className="text-sm text-muted-foreground">Used for descriptions and less important text.</p>
+                                {renderColorPalette(darkTextColors, (hsl) => handleColorChange('mutedTextColor', '--muted-foreground', hsl, 'Muted text'))}
+                                <Button variant="link" size="sm" className="px-0" onClick={() => handleColorChange('mutedTextColor', '--muted-foreground', defaultColors.mutedText, 'Muted text')}>Reset</Button>
+                            </div>
+                             <Separator />
+                             <div>
+                                <Label>Inverted Text (on Buttons)</Label>
+                                <p className="text-sm text-muted-foreground">Used for text on colored buttons and backgrounds.</p>
+                                {renderColorPalette(lightTextColors, (hsl) => handleColorChange('invertedTextColor', ['--primary-foreground', '--destructive-foreground'], hsl, 'Inverted text'))}
+                                 <Button variant="link" size="sm" className="px-0" onClick={() => handleColorChange('invertedTextColor', ['--primary-foreground', '--destructive-foreground'], defaultColors.invertedText, 'Inverted text')}>Reset</Button>
+                            </div>
+                        </TabsContent>
+
+                        <TabsContent value="accent" className="mt-4 space-y-6">
+                             <div>
+                                <Label>Accent Color</Label>
+                                <p className="text-sm text-muted-foreground">Used for buttons, links, and other interactive elements.</p>
+                                {renderColorPalette(accentColorOptions, (hsl) => handleColorChange('accentColor', ['--primary', '--ring'], hsl, 'Accent'))}
+                                <Button variant="link" size="sm" className="px-0" onClick={() => handleColorChange('accentColor', ['--primary', '--ring'], defaultColors.accent, 'Accent')}>Reset</Button>
+                            </div>
                         </TabsContent>
                     </Tabs>
                 </CardContent>
