@@ -243,20 +243,22 @@ export default function DashboardPage() {
                         <CardTitle>Recent Transactions</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <Table>
-                            <TableHeader className="bg-accent">
-                                <TableRow className="[&_th:not(:last-child)]:border-r">
-                                    <TableHead>ID</TableHead>
-                                    <TableHead>Items</TableHead>
-                                    <TableHead>Date</TableHead>
-                                    <TableHead className="text-right">Amount</TableHead>
-                                    <TableHead>Status</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {renderTableBody()}
-                            </TableBody>
-                        </Table>
+                        <div className="w-full overflow-x-auto rounded-md border">
+                            <Table>
+                                <TableHeader className="bg-accent">
+                                    <TableRow className="[&_th:not(:last-child)]:border-r">
+                                        <TableHead>ID</TableHead>
+                                        <TableHead>Items</TableHead>
+                                        <TableHead>Date</TableHead>
+                                        <TableHead className="text-right">Amount</TableHead>
+                                        <TableHead>Status</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {renderTableBody()}
+                                </TableBody>
+                            </Table>
+                        </div>
                     </CardContent>
                 </Card>
             </div>

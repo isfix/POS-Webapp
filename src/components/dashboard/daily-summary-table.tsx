@@ -126,35 +126,37 @@ export function DailySummaryTable() {
                 </Button>
             </CardHeader>
             <CardContent>
-                <Table>
-                    <TableHeader className="bg-accent">
-                        <TableRow className="[&_th:not(:last-child)]:border-r">
-                            <TableHead>Date</TableHead>
-                            <TableHead className="text-right">Revenue</TableHead>
-                            <TableHead className="text-right">Orders</TableHead>
-                            <TableHead>Top Item</TableHead>
-                            <TableHead className="text-right">Low Stock</TableHead>
-                            <TableHead className="text-right">In Repair</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {loading ? (
-                            Array.from({ length: 5 }).map((_, i) => (
-                                <TableRow key={i}>
-                                    <TableCell colSpan={6}><Skeleton className="h-8 w-full" /></TableCell>
-                                </TableRow>
-                            ))
-                        ) : summaries.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={6} className="text-center h-24">
-                                    No daily summaries found. Generate one for today to get started.
-                                </TableCell>
+                <div className="w-full overflow-x-auto rounded-md border">
+                    <Table>
+                        <TableHeader className="bg-accent">
+                            <TableRow className="[&_th:not(:last-child)]:border-r">
+                                <TableHead>Date</TableHead>
+                                <TableHead className="text-right">Revenue</TableHead>
+                                <TableHead className="text-right">Orders</TableHead>
+                                <TableHead>Top Item</TableHead>
+                                <TableHead className="text-right">Low Stock</TableHead>
+                                <TableHead className="text-right">In Repair</TableHead>
                             </TableRow>
-                        ) : (
-                            summaries.map(summary => <DailySummaryRow key={summary.id} summary={summary} />)
-                        )}
-                    </TableBody>
-                </Table>
+                        </TableHeader>
+                        <TableBody>
+                            {loading ? (
+                                Array.from({ length: 5 }).map((_, i) => (
+                                    <TableRow key={i}>
+                                        <TableCell colSpan={6}><Skeleton className="h-8 w-full" /></TableCell>
+                                    </TableRow>
+                                ))
+                            ) : summaries.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={6} className="text-center h-24">
+                                        No daily summaries found. Generate one for today to get started.
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                summaries.map(summary => <DailySummaryRow key={summary.id} summary={summary} />)
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
             </CardContent>
         </Card>
     );
