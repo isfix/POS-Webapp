@@ -95,7 +95,7 @@ export default function SettingsPage() {
     const [uploadedImages, setUploadedImages] = useState<string[]>([]);
     
     const [blurLevel, setBlurLevel] = useState(16);
-    const [opacityLevel, setOpacityLevel] = useState(0.4);
+    const [opacityLevel, setOpacityLevel] = useState(0.65);
     const [shadowBlur, setShadowBlur] = useState(20);
     const [shadowOpacity, setShadowOpacity] = useState(0.1);
 
@@ -110,7 +110,7 @@ export default function SettingsPage() {
             try {
                 const { blur, opacity, shadowBlur, shadowOpacity } = JSON.parse(glassSettings);
                 setBlurLevel(blur || 16);
-                setOpacityLevel(opacity || 0.4);
+                setOpacityLevel(opacity || 0.65);
                 setShadowBlur(shadowBlur || 20);
                 setShadowOpacity(shadowOpacity || 0.1);
             } catch (e) {
@@ -491,5 +491,5 @@ export default function SettingsPage() {
                 </CardContent>
             </Card>
         </div>
-    )
+    );
 }

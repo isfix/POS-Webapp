@@ -42,7 +42,7 @@
     --sidebar-ring: var(--ring);
 
     --glass-blur: 16px;
-    --glass-opacity: 0.4;
+    --glass-opacity: 0.65;
     --shadow-blur: 20px;
     --shadow-opacity: 0.1;
   }
