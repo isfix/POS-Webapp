@@ -33,11 +33,11 @@
     --chart-5: 240 10% 90%;
 
     --sidebar-background: 255 100% 100%;
-    --sidebar-foreground: 240 10% 20%;
+    --sidebar-foreground: var(--foreground);
     --sidebar-primary: var(--primary);
     --sidebar-primary-foreground: var(--primary-foreground);
     --sidebar-accent: 240 10% 90%;
-    --sidebar-accent-foreground: 240 10% 20%;
+    --sidebar-accent-foreground: var(--foreground);
     --sidebar-border: 240 5% 90%;
     --sidebar-ring: var(--ring);
 
