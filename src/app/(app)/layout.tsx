@@ -101,7 +101,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="absolute inset-0 bg-black/20 -z-10" />
         <MainSidebar />
         <div className="flex flex-1 flex-col md:p-2 min-w-0">
-            <main className="flex flex-1 flex-col rounded-lg bg-transparent overflow-hidden">
+            <main className="flex flex-1 flex-col rounded-lg glass-pane overflow-hidden">
             <Header />
             <div className="flex-1 p-2 sm:p-4 md:p-6 min-w-0 overflow-y-auto">{children}</div>
             </main>
