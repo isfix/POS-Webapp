@@ -34,6 +34,7 @@ import { ChevronDown, LogOut, Settings } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { auth } from '@/lib/firebase';
 import { signOut } from 'firebase/auth';
+import { Logo } from '../logo';
 
 export function MainSidebar() {
   const pathname = usePathname();
@@ -51,7 +52,9 @@ export function MainSidebar() {
   
   const content = (
     <>
-      <SidebarHeader />
+      <SidebarHeader>
+        <Logo />
+      </SidebarHeader>
       <SidebarContent className="flex flex-col pt-0">
         <SidebarMenu>
           {SIDENAV_ITEMS.map((item) =>
@@ -165,7 +168,7 @@ export function MainSidebar() {
       <Sheet open={openMobile} onOpenChange={setOpenMobile}>
         <SheetContent
           side="left"
-          className="w-72 glass-pane p-0 text-sidebar-foreground border-r-0 flex flex-col"
+          className="w-72 bg-sidebar p-0 text-sidebar-foreground border-r flex flex-col"
         >
           <SheetTitle className="sr-only">Main Menu</SheetTitle>
           <SheetDescription className="sr-only">
