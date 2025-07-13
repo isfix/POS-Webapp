@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 67% 97%; /* #E6E6FA - Soft Lavender */
+    --foreground: 240 10% 20%;
+    --card: 240 30% 96%; /* For translucent glass base */
+    --card-foreground: var(--foreground);
+    --popover: 255 100% 100%;
+    --popover-foreground: var(--foreground);
+    --primary: 250 60% 75%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 94%; /* #F0F0F0 - Light Gray */
+    --secondary-foreground: var(--foreground);
+    --muted: 0 0% 94%;
+    --muted-foreground: 240 10% 45%;
+    --accent: 240 10% 85%; /* Lighter Muted Grape for accents */
+    --accent-foreground: var(--foreground);
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5% 85%;
+    --input: 240 5% 90%;
+    --ring: 250 60% 75%;
+
+    --radius: 0.75rem;
+
+    --chart-1: var(--primary);
+    --chart-2: 240 10% 55%;
+    --chart-3: 240 10% 70%;
+    --chart-4: 240 10% 80%;
+    --chart-5: 240 10% 90%;
+
+    --sidebar-background: 255 100% 100%;
+    --sidebar-foreground: var(--foreground);
+    --sidebar-primary: var(--primary);
+    --sidebar-primary-foreground: var(--primary-foreground);
+    --sidebar-accent: 240 10% 90%;
+    --sidebar-accent-foreground: var(--foreground);
+    --sidebar-border: 240 5% 90%;
+    --sidebar-ring: var(--ring);
+
+    --glass-blur: 16px;
+    --glass-opacity: 0.65;
+    --shadow-blur: 20px;
+    --shadow-opacity: 0.1;
+  }
+  .dark {
+    --background: 240 10% 5%;
+    --foreground: 0 0% 98%;
+    --card: 240 4% 15%;
+    --card-foreground: var(--foreground);
+    --popover: 240 10% 5%;
+    --popover-foreground: var(--foreground);
+    --primary: 240 20% 75%;
+    --primary-foreground: 240 10% 5%;
+    --secondary: 240 5% 15%;
+    --secondary-foreground: var(--foreground);
+    --muted: 240 5% 15%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 240 5% 25%;
+    --accent-foreground: var(--foreground);
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5% 20%;
+    --input: 240 5% 20%;
+    --ring: 240 20% 75%;
+
+    --chart-1: var(--primary);
+    --chart-2: 240 20% 65%;
+    --chart-3: 240 20% 55%;
+    --chart-4: 240 20% 45%;
+    --chart-5: 240 20% 35%;
+
+    --sidebar-background: 240 10% 10%;
+    --sidebar-foreground: var(--foreground);
+    --sidebar-primary: var(--primary);
+    --sidebar-primary-foreground: var(--primary-foreground);
+    --sidebar-accent: 240 5% 25%;
+    --sidebar-accent-foreground: var(--foreground);
+    --sidebar-border: 240 5% 20%;
+    --sidebar-ring: var(--ring);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    min-height: 100vh;
+  }
+  html {
+    @apply bg-background;
+  }
+
+  /* Hide number input arrows */
+  input[type=number]::-webkit-inner-spin-button,
+  input[type=number]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type=number] {
+    -moz-appearance: textfield;
+  }
+}
+
+@layer components {
+    .glass-pane {
+        background-color: hsla(var(--card), var(--glass-opacity));
+        backdrop-filter: blur(var(--glass-blur));
+        box-shadow: 0 4px var(--shadow-blur) rgba(0, 0, 0, var(--shadow-opacity));
+        @apply border border-white/20;
+    }
+    .custom-shadow {
+      box-shadow: 0 4px var(--shadow-blur) rgba(0, 0, 0, var(--shadow-opacity));
+    }
+}
