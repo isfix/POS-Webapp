@@ -15,13 +15,13 @@ import { Separator } from '../ui/separator';
 import { useNotifications } from '@/context/NotificationContext';
 
 export function NotificationBell() {
-    const { notifications, unseenCount } = useNotifications();
+    const { notifications, unseenCount, markAsSeen, markAllAsSeen } = useNotifications();
     const [isOpen, setIsOpen] = useState(false);
     const { toast } = useToast();
 
     const handleMarkAsSeen = async (id: string) => {
         try {
-            await markNotificationAsSeen(id);
+            await markAsSeen(id);
         } catch (error) {
             toast({ title: 'Gagal', description: 'Gagal menandai notifikasi sudah dibaca.', variant: 'destructive' });
         }
@@ -29,7 +29,7 @@ export function NotificationBell() {
 
     const handleMarkAllAsSeen = async () => {
         try {
-            await markAllNotificationsAsSeen();
+            await markAllAsSeen();
             toast({ title: 'Berhasil', description: 'Semua notifikasi ditandai sudah dibaca.' });
         } catch (error) {
             toast({ title: 'Gagal', description: 'Gagal memperbarui notifikasi.', variant: 'destructive' });

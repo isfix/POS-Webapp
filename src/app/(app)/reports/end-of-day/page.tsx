@@ -38,9 +38,9 @@ export default function EndOfDayReportPage() {
     let totalQrisSales = 0;
 
     orders.forEach((ord) => {
-      const amount = ord.gross_revenue || ord.grossRevenue || ord.total || 0;
+      const amount = Number(ord.gross_revenue || ord.total || 0);
       totalSales += amount;
-      if (ord.payment_method === 'cash' || ord.payment_method === 'Tunai' || ord.paymentMethod === 'cash' || ord.paymentMethod === 'Tunai') {
+      if (ord.payment_method === 'cash' || ord.payment_method === 'Tunai') {
         totalCashSales += amount;
       } else {
         totalQrisSales += amount;
@@ -73,15 +73,15 @@ export default function EndOfDayReportPage() {
           .gte('created_at', start)
           .lte('created_at', end);
 
-        if (!error && data) {
+        if (!error && data && data.length > 0) {
           calculateDailySummary(data);
         } else {
-          const saved = localStorage.getItem('pos_orders');
+          const saved = localStorage.getItem('rotikita_orders');
           const localOrders = saved ? JSON.parse(saved) : [];
           calculateDailySummary(localOrders);
         }
       } catch (e) {
-        const saved = localStorage.getItem('pos_orders');
+        const saved = localStorage.getItem('rotikita_orders');
         const localOrders = saved ? JSON.parse(saved) : [];
         calculateDailySummary(localOrders);
       } finally {

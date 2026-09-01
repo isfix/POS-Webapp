@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+import { withFallback, mutateWithLocalSync } from '@/lib/db';
 import { useToast } from '@/hooks/use-toast';
 
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -47,15 +48,11 @@ export default function PosPage() {
   useEffect(() => {
     const fetchMenu = async () => {
       setLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from('menu_items')
-          .select('*')
-          .eq('availability', true)
-          .order('name', { ascending: true });
-
-        if (!error && data) {
-          const items: MenuItem[] = data.map((d: any) => ({
+      const items = await withFallback<MenuItem>(
+        () => supabase.from('menu_items').select('*').eq('availability', true).order('name', { ascending: true }),
+        'rotikita_menu',
+        {
+          transform: (data) => data.map((d: any) => ({
             id: d.id,
             name: d.name,
             category: d.category,
@@ -64,19 +61,11 @@ export default function PosPage() {
             imageUrl: d.image_url || d.imageUrl,
             availability: d.availability !== false,
             ingredients: d.ingredients || [],
-          }));
-          setMenuItems(items);
-          localStorage.setItem('pos_menu', JSON.stringify(items));
-        } else {
-          const localMenu = localStorage.getItem('pos_menu');
-          if (localMenu) setMenuItems(JSON.parse(localMenu));
+          })),
         }
-      } catch (e) {
-        const localMenu = localStorage.getItem('pos_menu');
-        if (localMenu) setMenuItems(JSON.parse(localMenu));
-      } finally {
-        setLoading(false);
-      }
+      );
+      setMenuItems(items);
+      setLoading(false);
     };
 
     fetchMenu();
@@ -91,50 +80,38 @@ export default function PosPage() {
   }, [menuItems]);
 
   const filteredMenuItems = useMemo(() => {
-    return (Array.isArray(menuItems) ? menuItems : []).filter(item => {
-      if (!item) return false;
-      const name = String(item.name || (item as any).title || '').toLowerCase();
-      const category = String(item.category || '').toLowerCase();
-      const query = String(searchQuery || '').toLowerCase();
-      const matchesSearch = name.includes(query) || category.includes(query);
-      const matchesCategory = selectedCategory === 'Semua' || category === String(selectedCategory || '').toLowerCase();
+    return menuItems.filter((item) => {
+      const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.category.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesCategory = selectedCategory === 'Semua' || item.category === selectedCategory;
       return matchesSearch && matchesCategory;
     });
   }, [menuItems, searchQuery, selectedCategory]);
 
-  const handleUpdateQuantity = (itemId: string, newQuantity: number) => {
-    setCart((prevCart) => {
-      const existingItemIndex = prevCart.findIndex((item) => item.id === itemId);
-      
-      if (newQuantity <= 0) {
-        return prevCart.filter((item) => item.id !== itemId);
-      }
-
-      if (existingItemIndex > -1) {
-        const updatedCart = [...prevCart];
-        updatedCart[existingItemIndex] = {
-          ...updatedCart[existingItemIndex],
-          quantity: newQuantity,
-        };
-        return updatedCart;
-      } else {
-        const itemToAdd = menuItems.find((item) => item.id === itemId);
-        if (itemToAdd) {
-          return [...prevCart, { ...itemToAdd, quantity: newQuantity }];
-        }
-        return prevCart;
-      }
-    });
+  const handleUpdateQuantity = (itemId: string, quantity: number) => {
+    if (quantity <= 0) {
+      setCart((prev) => prev.filter((item) => item.id !== itemId));
+      return;
+    }
+    setCart((prevCart) =>
+      prevCart.map((ci) => (ci.id === itemId ? { ...ci, quantity } : ci))
+    );
   };
 
   const handleClearCart = () => {
     setCart([]);
   };
 
-  const grossRevenue = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const totalCost = cart.reduce((sum, item) => sum + (item.costPrice || (item.price * 0.55)) * item.quantity, 0);
-  const totalProfit = grossRevenue - totalCost;
-  const total = grossRevenue;
+  const total = useMemo(() => {
+    return cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  }, [cart]);
+
+  const totalCost = useMemo(() => {
+    return cart.reduce((sum, item) => sum + (item.costPrice || 0) * item.quantity, 0);
+  }, [cart]);
+
+  const grossRevenue = total;
+  const totalProfit = Math.max(0, grossRevenue - totalCost);
 
   const handlePay = async (paymentMethod: 'cash' | 'qris', cashGiven?: number) => {
     if (cart.length === 0) {
@@ -145,42 +122,36 @@ export default function PosPage() {
     const orderData = {
       id: `ord-${Date.now()}`,
       created_at: new Date().toISOString(),
-      timestamp: new Date().toISOString(),
       items: cart.map(item => ({
         id: item.id,
         name: item.name,
         category: item.category,
         price: item.price,
-        costPrice: item.costPrice,
+        cost_price: item.costPrice,
         quantity: item.quantity,
       })),
       gross_revenue: grossRevenue,
-      grossRevenue: grossRevenue,
       total_cost: totalCost,
       total_profit: totalProfit,
-      totalProfit: totalProfit,
       total: total,
       payment_method: paymentMethod,
-      paymentMethod: paymentMethod,
       cash_given: cashGiven || total,
       change_due: cashGiven ? Math.max(0, cashGiven - total) : 0,
       customer_name: 'Walk-in Customer',
       status: 'Completed',
     };
 
-    // Save to local storage for instant offline access
-    try {
-      const existing = localStorage.getItem('pos_orders');
-      const orders = existing ? JSON.parse(existing) : [];
-      orders.unshift(orderData);
-      localStorage.setItem('pos_orders', JSON.stringify(orders.slice(0, 100)));
-    } catch (e) {
-      console.warn("Saved to local storage:", e);
+    let existingOrders: any[] = [];
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('rotikita_orders');
+        if (saved) existingOrders = JSON.parse(saved);
+      } catch (e) {}
     }
+    const updatedOrders = [orderData, ...existingOrders].slice(0, 100);
 
-    // Try Supabase sync
-    try {
-      await supabase.from('orders').insert([{
+    await mutateWithLocalSync('rotikita_orders', updatedOrders, () =>
+      supabase.from('orders').insert([{
         items: orderData.items,
         gross_revenue: grossRevenue,
         total_cost: totalCost,
@@ -191,10 +162,8 @@ export default function PosPage() {
         change_due: cashGiven ? Math.max(0, cashGiven - total) : 0,
         customer_name: 'Walk-in Customer',
         status: 'Completed',
-      }]);
-    } catch (error) {
-      console.warn('Saved order to local demo store (Supabase offline): ', error);
-    }
+      }])
+    );
 
     toast({ title: 'Pembayaran Berhasil', description: `Pesanan senilai ${formatCurrency(total)} sukses dicatat!` });
     handleClearCart();

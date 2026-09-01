@@ -59,14 +59,14 @@ export default function EndOfMonthReportPage() {
     (Array.isArray(orders) ? orders : []).forEach((ord) => {
       const dateObj = parseSafeDate(ord.created_at || ord.timestamp);
       const day = format(dateObj, 'dd');
-      const amount = Number(ord.gross_revenue || ord.grossRevenue || ord.total || 0);
+      const amount = Number(ord.gross_revenue || ord.total || 0);
       
       totalSales += amount;
       if (dailySales[day] !== undefined) {
         dailySales[day] += amount;
       }
 
-      if (ord.payment_method === 'cash' || ord.payment_method === 'Tunai' || ord.paymentMethod === 'cash' || ord.paymentMethod === 'Tunai') {
+      if (ord.payment_method === 'cash' || ord.payment_method === 'Tunai') {
         totalCashSales += amount;
       } else {
         totalQrisSales += amount;
@@ -108,15 +108,15 @@ export default function EndOfMonthReportPage() {
           .gte('created_at', monthStart)
           .lte('created_at', monthEnd);
 
-        if (!error && data) {
+        if (!error && data && data.length > 0) {
           calculateMonthlyData(data);
         } else {
-          const saved = localStorage.getItem('pos_orders');
+          const saved = localStorage.getItem('rotikita_orders');
           const localOrders = saved ? JSON.parse(saved) : [];
           calculateMonthlyData(localOrders);
         }
       } catch (e) {
-        const saved = localStorage.getItem('pos_orders');
+        const saved = localStorage.getItem('rotikita_orders');
         const localOrders = saved ? JSON.parse(saved) : [];
         calculateMonthlyData(localOrders);
       } finally {

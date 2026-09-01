@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+import { withFallback, mutateWithLocalSync } from '@/lib/db';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { startOfDay, endOfDay, format, subDays } from 'date-fns';
@@ -39,18 +40,15 @@ export default function DataManagementPage() {
   });
 
   useEffect(() => {
-    // Fetch from Supabase
     const fetchData = async () => {
       setLoading(true);
       setLogsLoading(true);
-      try {
-        const { data: menuData, error: menuErr } = await supabase
-          .from('menu_items')
-          .select('*')
-          .order('name', { ascending: true });
 
-        if (!menuErr && menuData) {
-          const items: MenuItem[] = menuData.map((d: any) => ({
+      const items = await withFallback<MenuItem>(
+        () => supabase.from('menu_items').select('*').order('name', { ascending: true }),
+        'rotikita_menu',
+        {
+          transform: (data) => data.map((d: any) => ({
             id: d.id,
             name: d.name,
             category: d.category,
@@ -59,50 +57,30 @@ export default function DataManagementPage() {
             imageUrl: d.image_url || d.imageUrl,
             availability: d.availability !== false,
             ingredients: d.ingredients || [],
-          }));
-          setMenuItems(items);
-          localStorage.setItem('pos_menu', JSON.stringify(items));
-        } else {
-          const savedMenu = localStorage.getItem('pos_menu');
-          if (savedMenu) setMenuItems(JSON.parse(savedMenu));
+          })),
         }
+      );
+      setMenuItems(items);
+      setLoading(false);
 
-        const { data: logData, error: logErr } = await supabase
-          .from('activity_logs')
-          .select('*')
-          .order('created_at', { ascending: false });
-
-        if (!logErr && logData) {
-          setActivityLogs(logData.map((l: any) => ({
+      const logs = await withFallback<ActivityLog>(
+        () => supabase.from('activity_logs').select('*').order('created_at', { ascending: false }),
+        'rotikita_logs',
+        {
+          transform: (data) => data.map((l: any) => ({
             id: l.id,
             user: l.user_name || l.user || 'Admin',
             action: l.action,
             timestamp: l.created_at || l.timestamp || new Date().toISOString(),
-          })));
-        } else {
-          const savedLogs = localStorage.getItem('pos_logs');
-          if (savedLogs) setActivityLogs(JSON.parse(savedLogs));
+          })),
         }
-      } catch (e) {
-        const savedMenu = localStorage.getItem('pos_menu');
-        if (savedMenu) setMenuItems(JSON.parse(savedMenu));
-        const savedLogs = localStorage.getItem('pos_logs');
-        if (savedLogs) setActivityLogs(JSON.parse(savedLogs));
-      } finally {
-        setLoading(false);
-        setLogsLoading(false);
-      }
+      );
+      setActivityLogs(logs);
+      setLogsLoading(false);
     };
 
     fetchData();
   }, []);
-
-  const saveLocalMenu = (items: MenuItem[]) => {
-    setMenuItems(items);
-    try {
-      localStorage.setItem('pos_menu', JSON.stringify(items));
-    } catch (e) {}
-  };
 
   const addActivityLog = async (action: string) => {
     const operatorName = user?.displayName || user?.email || 'Staf Kasir';
@@ -112,18 +90,15 @@ export default function DataManagementPage() {
       action,
       timestamp: new Date().toISOString(),
     };
-    const updatedLogs = [newLog, ...activityLogs];
+    const updatedLogs = [newLog, ...activityLogs].slice(0, 100);
     setActivityLogs(updatedLogs);
-    try {
-      localStorage.setItem('pos_logs', JSON.stringify(updatedLogs.slice(0, 100)));
-    } catch (e) {}
 
-    try {
-      await supabase.from('activity_logs').insert([{
+    await mutateWithLocalSync('rotikita_logs', updatedLogs, () =>
+      supabase.from('activity_logs').insert([{
         user_name: operatorName,
         action,
-      }]);
-    } catch (e) {}
+      }])
+    );
   };
 
   const handleAddItem = async (newItemData: Omit<MenuItem, 'id'>) => {
@@ -132,12 +107,13 @@ export default function DataManagementPage() {
       ...newItemData,
       id: tempId,
     };
-    saveLocalMenu([...menuItems, newItem]);
+    const updated = [newItem, ...menuItems];
+    setMenuItems(updated);
     addActivityLog(`Menambah produk '${newItemData.name}'`);
     toast({ title: 'Berhasil', description: 'Produk baru berhasil ditambahkan.' });
 
-    try {
-      const { data, error } = await supabase.from('menu_items').insert([{
+    await mutateWithLocalSync('rotikita_menu', updated, () =>
+      supabase.from('menu_items').insert([{
         name: newItemData.name,
         category: newItemData.category,
         price: newItemData.price,
@@ -145,24 +121,18 @@ export default function DataManagementPage() {
         image_url: newItemData.imageUrl,
         availability: newItemData.availability,
         ingredients: newItemData.ingredients,
-      }]).select().single();
-
-      if (data && !error) {
-        setMenuItems(prev => prev.map(m => m.id === tempId ? { ...m, id: data.id } : m));
-      }
-    } catch (error) {
-      console.warn("Saved to local store fallback");
-    }
+      }])
+    );
   };
 
   const handleEditItem = async (itemToUpdate: MenuItem) => {
     const updated = menuItems.map(item => item.id === itemToUpdate.id ? itemToUpdate : item);
-    saveLocalMenu(updated);
+    setMenuItems(updated);
     addActivityLog(`Memperbarui produk '${itemToUpdate.name}'`);
     toast({ title: 'Berhasil', description: 'Data produk berhasil diperbarui.' });
 
-    try {
-      await supabase.from('menu_items').update({
+    await mutateWithLocalSync('rotikita_menu', updated, () =>
+      supabase.from('menu_items').update({
         name: itemToUpdate.name,
         category: itemToUpdate.category,
         price: itemToUpdate.price,
@@ -170,23 +140,19 @@ export default function DataManagementPage() {
         image_url: itemToUpdate.imageUrl,
         availability: itemToUpdate.availability,
         ingredients: itemToUpdate.ingredients,
-      }).eq('id', itemToUpdate.id);
-    } catch (error) {
-      console.warn("Saved to local store fallback");
-    }
+      }).eq('id', itemToUpdate.id)
+    );
   };
 
   const handleDeleteItem = async (itemToDelete: MenuItem) => {
     const filtered = menuItems.filter(item => item.id !== itemToDelete.id);
-    saveLocalMenu(filtered);
+    setMenuItems(filtered);
     addActivityLog(`Menghapus produk '${itemToDelete.name}'`);
     toast({ title: 'Berhasil', description: 'Produk berhasil dihapus.' });
 
-    try {
-      await supabase.from('menu_items').delete().eq('id', itemToDelete.id);
-    } catch (error) {
-      console.warn("Saved to local store fallback");
-    }
+    await mutateWithLocalSync('rotikita_menu', filtered, () =>
+      supabase.from('menu_items').delete().eq('id', itemToDelete.id)
+    );
   };
 
   const filteredLogs = useMemo(() => {

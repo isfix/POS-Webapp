@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+import { withFallback, mutateWithLocalSync } from '@/lib/db';
 import { useToast } from '@/hooks/use-toast';
 import * as xlsx from 'xlsx';
 
@@ -25,19 +26,16 @@ export default function AssetsPage() {
   useEffect(() => {
     const fetchSupabaseAssets = async () => {
       setLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from('assets')
-          .select('*')
-          .order('name', { ascending: true });
-
-        if (!error && data) {
-          const items: Asset[] = data.map((d: any) => ({
+      const items = await withFallback<Asset>(
+        () => supabase.from('assets').select('*').order('name', { ascending: true }),
+        'rotikita_assets',
+        {
+          transform: (data) => data.map((d: any) => ({
             id: d.id,
             name: d.name,
             category: d.category,
             quantity: Number(d.quantity || 1),
-            price: Number(d.price || 0),
+            price: Number(d.price || d.cost || 0),
             condition: d.condition || 'Baik',
             purchaseDate: d.purchase_date || d.purchaseDate || new Date().toISOString(),
             assignedTo: d.assigned_to || d.assignedTo || '',
@@ -46,30 +44,15 @@ export default function AssetsPage() {
             notes: d.notes || '',
             imageUrl: d.image_url || d.imageUrl || '',
             maintenanceDate: d.maintenance_date || d.maintenanceDate || null,
-          }));
-          setAssets(items);
-          localStorage.setItem('pos_assets', JSON.stringify(items));
-        } else {
-          const saved = localStorage.getItem('pos_assets');
-          if (saved) setAssets(JSON.parse(saved));
+          })),
         }
-      } catch (e) {
-        const saved = localStorage.getItem('pos_assets');
-        if (saved) setAssets(JSON.parse(saved));
-      } finally {
-        setLoading(false);
-      }
+      );
+      setAssets(items);
+      setLoading(false);
     };
 
     fetchSupabaseAssets();
   }, []);
-
-  const saveLocalAssets = (items: Asset[]) => {
-    setAssets(items);
-    try {
-      localStorage.setItem('pos_assets', JSON.stringify(items));
-    } catch (e) {}
-  };
 
   const handleAddItem = async (newItemData: Omit<Asset, 'id'>) => {
     const tempId = `asset-${Date.now()}`;
@@ -77,15 +60,16 @@ export default function AssetsPage() {
       ...newItemData,
       id: tempId,
     };
-    saveLocalAssets([newItem, ...assets]);
+    const updated = [newItem, ...assets];
+    setAssets(updated);
     toast({ title: 'Berhasil', description: 'Peralatan mesin baru berhasil didaftarkan.' });
 
-    try {
-      const { data, error } = await supabase.from('assets').insert([{
+    await mutateWithLocalSync('rotikita_assets', updated, () =>
+      supabase.from('assets').insert([{
         name: newItemData.name,
         category: newItemData.category,
         quantity: newItemData.quantity,
-        price: newItemData.price,
+        cost: newItemData.price,
         condition: newItemData.condition,
         purchase_date: newItemData.purchaseDate,
         assigned_to: newItemData.assignedTo,
@@ -94,27 +78,21 @@ export default function AssetsPage() {
         notes: newItemData.notes,
         image_url: newItemData.imageUrl,
         maintenance_date: newItemData.maintenanceDate,
-      }]).select().single();
-
-      if (data && !error) {
-        setAssets(prev => prev.map(a => a.id === tempId ? { ...a, id: data.id } : a));
-      }
-    } catch (error) {
-      console.warn("Saved to local storage fallback");
-    }
+      }])
+    );
   };
 
   const handleEditItem = async (itemToUpdate: Asset) => {
     const updated = assets.map(item => item.id === itemToUpdate.id ? itemToUpdate : item);
-    saveLocalAssets(updated);
+    setAssets(updated);
     toast({ title: 'Berhasil', description: 'Data peralatan berhasil diperbarui.' });
 
-    try {
-      await supabase.from('assets').update({
+    await mutateWithLocalSync('rotikita_assets', updated, () =>
+      supabase.from('assets').update({
         name: itemToUpdate.name,
         category: itemToUpdate.category,
         quantity: itemToUpdate.quantity,
-        price: itemToUpdate.price,
+        cost: itemToUpdate.price,
         condition: itemToUpdate.condition,
         purchase_date: itemToUpdate.purchaseDate,
         assigned_to: itemToUpdate.assignedTo,
@@ -123,22 +101,18 @@ export default function AssetsPage() {
         notes: itemToUpdate.notes,
         image_url: itemToUpdate.imageUrl,
         maintenance_date: itemToUpdate.maintenanceDate,
-      }).eq('id', itemToUpdate.id);
-    } catch (error) {
-      console.warn("Saved to local storage fallback");
-    }
+      }).eq('id', itemToUpdate.id)
+    );
   };
 
   const handleDeleteItem = async (itemToDelete: Asset) => {
     const filtered = assets.filter(item => item.id !== itemToDelete.id);
-    saveLocalAssets(filtered);
+    setAssets(filtered);
     toast({ title: 'Berhasil', description: 'Peralatan berhasil dihapus dari inventaris.' });
 
-    try {
-      await supabase.from('assets').delete().eq('id', itemToDelete.id);
-    } catch (error) {
-      console.warn("Saved to local store fallback");
-    }
+    await mutateWithLocalSync('rotikita_assets', filtered, () =>
+      supabase.from('assets').delete().eq('id', itemToDelete.id)
+    );
   };
 
   const handleExportAssets = (dataToExport: Asset[]) => {

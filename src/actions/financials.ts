@@ -82,7 +82,7 @@ async function getBaselineRevenue(): Promise<number> {
       .gte('created_at', oneYearAgo.toISOString());
 
     if (!data || data.length === 0) {
-      return 75000000;
+      return 0;
     }
 
     const monthlySales: { [key: string]: number } = {};
@@ -95,20 +95,20 @@ async function getBaselineRevenue(): Promise<number> {
         monthlySales[monthKey] = 0;
         monthCount++;
       }
-      monthlySales[monthKey] += row.gross_revenue || row.total || 0;
+      monthlySales[monthKey] += Number(row.gross_revenue || row.total || 0);
     });
 
     const totalRevenue = Object.values(monthlySales).reduce((acc, val) => acc + val, 0);
-    return totalRevenue / (monthCount || 1);
+    return monthCount > 0 ? totalRevenue / monthCount : 0;
   } catch (e) {
-    return 75000000;
+    return 0;
   }
 }
 
 async function getAverageMonthlyExpenses(): Promise<number> {
   try {
     const { data } = await supabase.from('expenses').select('amount, expense_date');
-    if (!data || data.length === 0) return 15000000;
+    if (!data || data.length === 0) return 0;
 
     let totalExpenses = 0;
     let firstDate: Date | null = null;
@@ -121,12 +121,12 @@ async function getAverageMonthlyExpenses(): Promise<number> {
       if (!lastDate || expenseDate > lastDate) lastDate = expenseDate;
     });
 
-    if (!firstDate || !lastDate) return 15000000;
+    if (!firstDate || !lastDate) return 0;
 
     const months = differenceInMonths(lastDate, firstDate) + 1;
-    return totalExpenses / (months || 1);
+    return months > 0 ? totalExpenses / months : 0;
   } catch (e) {
-    return 15000000;
+    return 0;
   }
 }
 
@@ -282,26 +282,26 @@ export async function generateAiProjection(): Promise<AiProjectionOutput> {
 
     const historicalSales = (orders || []).map((order: any) => ({
       date: new Date(order.created_at || Date.now()).toISOString().split('T')[0],
-      total: order.gross_revenue || order.total || 45000,
+      total: Number(order.gross_revenue || order.total || 0),
       items: order.items || [],
     }));
 
     const inventoryLevels = (inventory || []).map((item: any) => ({
       name: item.name,
       quantity: item.quantity,
-      costPerUnit: item.cost_per_unit,
+      costPerUnit: item.cost_per_unit || item.costPerUnit || 0,
     }));
 
     const menuItems = (menu || []).map((item: any) => ({
       name: item.name,
-      price: item.price,
-      costPrice: item.cost_price,
+      price: item.price || 0,
+      costPrice: item.cost_price || item.costPrice || 0,
     }));
 
     const historicalExpenses = (exp || []).map((expense: any) => ({
-      date: new Date(expense.expense_date || Date.now()).toISOString().split('T')[0],
+      date: new Date(expense.expense_date || expense.date || Date.now()).toISOString().split('T')[0],
       category: expense.category,
-      amount: expense.amount,
+      amount: Number(expense.amount || 0),
     }));
 
     const result = await runAutomatedFinancialProjection({
@@ -342,12 +342,10 @@ export async function generateFinancialStatements(
 
     if (ordersData && ordersData.length > 0) {
       ordersData.forEach((order: any) => {
-        revenue += Number(order.gross_revenue || order.total || 0);
-        cogs += Number(order.total_cost || (order.gross_revenue ? order.gross_revenue * 0.45 : 0));
+        const orderRev = Number(order.gross_revenue || order.total || 0);
+        revenue += orderRev;
+        cogs += Number(order.total_cost || (orderRev > 0 ? orderRev * 0.45 : 0));
       });
-    } else {
-      revenue = 38500000;
-      cogs = 15400000;
     }
 
     const { data: expensesData } = await supabase
@@ -362,28 +360,36 @@ export async function generateFinancialStatements(
         categorizedExpenses[expense.category] = (categorizedExpenses[expense.category] || 0) + amt;
         totalExpenses += amt;
       });
-    } else {
-      categorizedExpenses['Listrik & Gas Oven'] = 2500000;
-      categorizedExpenses['Gaji Baker & Kasir'] = 8000000;
-      categorizedExpenses['Kemasan Dus Roti'] = 1200000;
-      totalExpenses = 11700000;
     }
   } catch (e) {
-    revenue = 38500000;
-    cogs = 15400000;
-    categorizedExpenses['Listrik & Gas Oven'] = 2500000;
-    categorizedExpenses['Gaji Baker & Kasir'] = 8000000;
-    categorizedExpenses['Kemasan Dus Roti'] = 1200000;
-    totalExpenses = 11700000;
+    console.warn("Could not load financial records from database:", e);
+  }
+
+  // Calculate actual depreciation from active assets if available
+  let depreciation = 0;
+  try {
+    const { data: assetsData } = await supabase.from('assets').select('*');
+    if (assetsData && assetsData.length > 0) {
+      assetsData.forEach((ast: any) => {
+        if (ast.status === 'Aktif' || ast.status === 'Active') {
+          const cost = Number(ast.cost || ast.purchase_price || 0);
+          const usefulMonths = Number(ast.useful_life_months || (ast.useful_life_years ? ast.useful_life_years * 12 : 60));
+          if (cost > 0 && usefulMonths > 0) {
+            depreciation += cost / usefulMonths;
+          }
+        }
+      });
+    }
+  } catch (e) {
+    depreciation = 0;
   }
 
   const grossProfit = revenue - cogs;
   const expenses = Object.entries(categorizedExpenses).map(([category, total]) => ({ category, total }));
-  const depreciation = 750000;
-  const operatingIncome = grossProfit - totalExpenses - depreciation;
+  const operatingIncome = grossProfit - totalExpenses - Math.round(depreciation);
   const taxes = operatingIncome > 0 ? operatingIncome * 0.005 : 0;
   const netIncome = operatingIncome - taxes;
-  const cashFromOperations = netIncome + depreciation;
+  const cashFromOperations = netIncome + Math.round(depreciation);
 
   return {
     period: {
@@ -396,14 +402,14 @@ export async function generateFinancialStatements(
       grossProfit,
       expenses,
       totalExpenses,
-      depreciation,
+      depreciation: Math.round(depreciation),
       operatingIncome,
       taxes,
       netIncome,
     },
     cashFlow: {
       netIncome,
-      depreciation,
+      depreciation: Math.round(depreciation),
       cashFromOperations,
     },
   };

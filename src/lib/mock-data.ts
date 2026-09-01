@@ -296,7 +296,28 @@ export const INITIAL_ASSETS = [
   },
 ];
 
-// Generate realistic mock orders for the last 7 days
+export const INITIAL_LOGS = [
+  {
+    id: 'log-1',
+    user_name: 'Staf Kasir',
+    action: 'Membuka sesi kasir dan mencatat transaksi awal',
+    created_at: new Date(Date.now() - 3600000).toISOString(),
+  },
+  {
+    id: 'log-2',
+    user_name: 'Admin Toko',
+    action: 'Memeriksa dan memperbarui stok Tepung Terigu Cakra Kembar',
+    created_at: new Date(Date.now() - 7200000).toISOString(),
+  },
+  {
+    id: 'log-3',
+    user_name: 'Manager Bakery',
+    action: 'Memverifikasi resep dan HPP Roti Sisir Mentega Spesial',
+    created_at: new Date(Date.now() - 86400000).toISOString(),
+  },
+];
+
+// Generate realistic mock orders for the last 7 days (canonical snake_case shape)
 export const generateMockOrders = () => {
   const orders: any[] = [];
   const now = new Date();
@@ -312,32 +333,44 @@ export const generateMockOrders = () => {
       const randomItemsCount = 1 + Math.floor(Math.random() * 3);
       const items: any[] = [];
       let totalAmount = 0;
+      let totalCost = 0;
 
       for (let k = 0; k < randomItemsCount; k++) {
         const randomItem = INITIAL_MENU_ITEMS[Math.floor(Math.random() * INITIAL_MENU_ITEMS.length)];
         const qty = 1 + Math.floor(Math.random() * 3);
+        const itemPrice = randomItem.price * qty;
+        const itemCost = randomItem.costPrice * qty;
+
         items.push({
           id: randomItem.id,
           name: randomItem.name,
           price: randomItem.price,
-          costPrice: randomItem.costPrice,
+          cost_price: randomItem.costPrice,
           quantity: qty,
           category: randomItem.category,
         });
-        totalAmount += randomItem.price * qty;
+
+        totalAmount += itemPrice;
+        totalCost += itemCost;
       }
 
+      const totalProfit = totalAmount - totalCost;
       const paymentMethod = paymentMethods[Math.floor(Math.random() * paymentMethods.length)];
+      const cashGiven = paymentMethod === 'Tunai' ? (Math.ceil(totalAmount / 50000) * 50000 || totalAmount) : totalAmount;
+
       orders.push({
         id: `ord-${i}-${j}-${Date.now()}`,
         items,
         total: totalAmount,
-        grossRevenue: totalAmount,
-        paymentMethod,
-        customerName: sampleCustomers[Math.floor(Math.random() * sampleCustomers.length)],
+        gross_revenue: totalAmount,
+        total_cost: totalCost,
+        total_profit: totalProfit,
+        payment_method: paymentMethod,
+        cash_given: cashGiven,
+        change_due: Math.max(0, cashGiven - totalAmount),
+        customer_name: sampleCustomers[Math.floor(Math.random() * sampleCustomers.length)],
         status: 'Completed',
         created_at: orderDate.toISOString(),
-        timestamp: orderDate.toISOString(),
       });
     }
   }
@@ -363,5 +396,8 @@ export const ensureMockDataInitialized = () => {
   }
   if (!localStorage.getItem('rotikita_orders')) {
     localStorage.setItem('rotikita_orders', JSON.stringify(generateMockOrders()));
+  }
+  if (!localStorage.getItem('rotikita_logs')) {
+    localStorage.setItem('rotikita_logs', JSON.stringify(INITIAL_LOGS));
   }
 };

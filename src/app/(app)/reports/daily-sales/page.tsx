@@ -41,7 +41,7 @@ export default function DailySalesPage() {
   const loadLocalSales = (targetDate: Date) => {
     let orders: any[] = [];
     try {
-      const saved = localStorage.getItem('pos_orders');
+      const saved = localStorage.getItem('rotikita_orders');
       orders = saved ? JSON.parse(saved) : [];
     } catch (e) {
       orders = [];
@@ -62,8 +62,8 @@ export default function DailySalesPage() {
         id: ord.id ? String(ord.id).slice(0, 8).toUpperCase() : 'TRX',
         time: d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
         item: (ord.items || []).map((item: any) => `${item.name} (x${item.quantity})`).join(', ') || 'Item Penjualan',
-        amount: Number(ord.gross_revenue || ord.grossRevenue || ord.total || 0),
-        paymentMethod: ord.payment_method || ord.paymentMethod || 'Tunai',
+        amount: Number(ord.gross_revenue || ord.total || 0),
+        paymentMethod: ord.payment_method || 'Tunai',
       };
     });
 

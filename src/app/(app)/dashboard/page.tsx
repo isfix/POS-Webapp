@@ -72,8 +72,8 @@ export default function DashboardPage() {
         const dateObj = parseSafeDate(order.created_at || order.timestamp);
         const dayOfWeek = format(dateObj, 'EEE', { locale: idLocale });
         
-        const rev = Number(order.gross_revenue || order.grossRevenue || order.total || 0);
-        const prof = Number(order.total_profit || order.totalProfit || (rev * 0.45));
+        const rev = Number(order.gross_revenue || order.total || 0);
+        const prof = Number(order.total_profit || (rev * 0.45));
         
         weeklyRevenue += rev;
         weeklyProfit += prof;
@@ -132,9 +132,9 @@ export default function DashboardPage() {
         id: order.id ? String(order.id).slice(0, 8).toUpperCase() : 'TRX',
         itemsSummary: itemsList || 'Item Penjualan',
         date: format(dateObj, 'd MMM, HH:mm', { locale: idLocale }),
-        amount: formatCurrency(Number(order.gross_revenue || order.grossRevenue || order.total || 0)),
+        amount: formatCurrency(Number(order.gross_revenue || order.total || 0)),
         status: 'Selesai',
-        paymentMethod: order.payment_method || order.paymentMethod || 'Tunai',
+        paymentMethod: order.payment_method || 'Tunai',
       };
     });
 
@@ -163,11 +163,11 @@ export default function DashboardPage() {
           .order('created_at', { ascending: false })
           .limit(100);
 
-        if (!error && data) {
+        if (!error && data && data.length > 0) {
           calculateStatsFromOrders(data);
-          localStorage.setItem('pos_orders', JSON.stringify(data));
+          localStorage.setItem('rotikita_orders', JSON.stringify(data));
         } else {
-          const savedOrders = localStorage.getItem('pos_orders');
+          const savedOrders = localStorage.getItem('rotikita_orders');
           if (savedOrders) {
             calculateStatsFromOrders(JSON.parse(savedOrders));
           } else {
@@ -175,7 +175,7 @@ export default function DashboardPage() {
           }
         }
       } catch (e) {
-        const savedOrders = localStorage.getItem('pos_orders');
+        const savedOrders = localStorage.getItem('rotikita_orders');
         if (savedOrders) {
           calculateStatsFromOrders(JSON.parse(savedOrders));
         } else {

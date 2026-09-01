@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+import { withFallback, mutateWithLocalSync } from '@/lib/db';
 import { useToast } from '@/hooks/use-toast';
 import { startOfMonth, endOfMonth } from 'date-fns';
 
@@ -25,44 +26,26 @@ export default function ExpensesPage() {
   useEffect(() => {
     const fetchSupabaseExpenses = async () => {
       setLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from('expenses')
-          .select('*')
-          .order('expense_date', { ascending: false });
-
-        if (!error && data) {
-          const items: Expense[] = data.map((d: any) => ({
+      const items = await withFallback<Expense>(
+        () => supabase.from('expenses').select('*').order('expense_date', { ascending: false }),
+        'rotikita_expenses',
+        {
+          transform: (data) => data.map((d: any) => ({
             id: d.id,
             title: d.title || d.description || 'Pengeluaran',
             category: d.category,
             amount: Number(d.amount || 0),
             expenseDate: d.expense_date || d.expenseDate || new Date().toISOString(),
             notes: d.notes || d.description || '',
-          }));
-          setExpenses(items);
-          localStorage.setItem('pos_expenses', JSON.stringify(items));
-        } else {
-          const saved = localStorage.getItem('pos_expenses');
-          if (saved) setExpenses(JSON.parse(saved));
+          })),
         }
-      } catch (e) {
-        const saved = localStorage.getItem('pos_expenses');
-        if (saved) setExpenses(JSON.parse(saved));
-      } finally {
-        setLoading(false);
-      }
+      );
+      setExpenses(items);
+      setLoading(false);
     };
 
     fetchSupabaseExpenses();
   }, []);
-
-  const saveLocalExpenses = (items: Expense[]) => {
-    setExpenses(items);
-    try {
-      localStorage.setItem('pos_expenses', JSON.stringify(items));
-    } catch (e) {}
-  };
 
   const handleAddItem = async (newItemData: Omit<Expense, 'id' | 'createdAt'>) => {
     const tempId = `exp-${Date.now()}`;
@@ -71,54 +54,45 @@ export default function ExpensesPage() {
       id: tempId,
       createdAt: new Date().toISOString(),
     };
-    saveLocalExpenses([newItem, ...expenses]);
+    const updated = [newItem, ...expenses];
+    setExpenses(updated);
     toast({ title: 'Berhasil', description: 'Pengeluaran baru berhasil dicatat.' });
 
-    try {
-      const { data, error } = await supabase.from('expenses').insert([{
+    await mutateWithLocalSync('rotikita_expenses', updated, () =>
+      supabase.from('expenses').insert([{
         title: newItemData.title,
         category: newItemData.category,
         amount: newItemData.amount,
         expense_date: newItemData.expenseDate,
         notes: newItemData.notes,
-      }]).select().single();
-
-      if (data && !error) {
-        setExpenses(prev => prev.map(e => e.id === tempId ? { ...e, id: data.id } : e));
-      }
-    } catch (error) {
-      console.warn("Saved to local storage fallback");
-    }
+      }])
+    );
   };
 
   const handleEditItem = async (itemToUpdate: Expense) => {
     const updated = expenses.map(item => item.id === itemToUpdate.id ? itemToUpdate : item);
-    saveLocalExpenses(updated);
+    setExpenses(updated);
     toast({ title: 'Berhasil', description: 'Catatan pengeluaran berhasil diperbarui.' });
 
-    try {
-      await supabase.from('expenses').update({
+    await mutateWithLocalSync('rotikita_expenses', updated, () =>
+      supabase.from('expenses').update({
         title: itemToUpdate.title,
         category: itemToUpdate.category,
         amount: itemToUpdate.amount,
         expense_date: itemToUpdate.expenseDate,
         notes: itemToUpdate.notes,
-      }).eq('id', itemToUpdate.id);
-    } catch (error) {
-      console.warn("Saved to local storage fallback");
-    }
+      }).eq('id', itemToUpdate.id)
+    );
   };
 
   const handleDeleteItem = async (itemToDelete: Expense) => {
     const filtered = expenses.filter(item => item.id !== itemToDelete.id);
-    saveLocalExpenses(filtered);
+    setExpenses(filtered);
     toast({ title: 'Berhasil', description: 'Catatan pengeluaran berhasil dihapus.' });
 
-    try {
-      await supabase.from('expenses').delete().eq('id', itemToDelete.id);
-    } catch (error) {
-      console.warn("Saved to local storage fallback");
-    }
+    await mutateWithLocalSync('rotikita_expenses', filtered, () =>
+      supabase.from('expenses').delete().eq('id', itemToDelete.id)
+    );
   };
 
   const summaryStats = useMemo(() => {

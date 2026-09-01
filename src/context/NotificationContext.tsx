@@ -1,54 +1,49 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { supabase } from '@/lib/supabase';
+import { fetchNotifications, markNotificationAsSeen, markAllNotificationsAsSeen, type NotificationRecord } from '@/actions/notifications';
 import { useAuth } from './AuthContext';
 
-type Notification = {
-  id: string;
-  title: string;
-  body: string;
-  type: string;
-  seen: boolean;
-  timestamp: string | Date;
-};
-
-const DEFAULT_NOTIFICATIONS: Notification[] = [
-  {
-    id: 'notif-1',
-    title: 'Stok Mentega Anchor Menipis',
-    body: 'Sisa stok tinggal 4 kg, di bawah batas minimum 10 kg.',
-    type: 'warning',
-    seen: false,
-    timestamp: new Date().toISOString(),
-  },
-  {
-    id: 'notif-2',
-    title: 'Servis Berkala Oven Gas',
-    body: 'Jadwal servis rutin Oven Deck Sinmag dijadwalkan minggu ini.',
-    type: 'info',
-    seen: false,
-    timestamp: new Date(Date.now() - 86400000).toISOString(),
-  },
-];
+export type Notification = NotificationRecord;
 
 type NotificationContextType = {
   notifications: Notification[];
   unseenCount: number;
   loading: boolean;
+  markAsSeen: (id: string) => Promise<void>;
+  markAllAsSeen: () => Promise<void>;
+  refreshNotifications: () => Promise<void>;
 };
 
 const NotificationContext = createContext<NotificationContextType>({
-  notifications: DEFAULT_NOTIFICATIONS,
-  unseenCount: 2,
+  notifications: [],
+  unseenCount: 0,
   loading: false,
+  markAsSeen: async () => {},
+  markAllAsSeen: async () => {},
+  refreshNotifications: async () => {},
 });
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const [notifications, setNotifications] = useState<Notification[]>(DEFAULT_NOTIFICATIONS);
-  const [unseenCount, setUnseenCount] = useState(2);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unseenCount, setUnseenCount] = useState(0);
   const [loading, setLoading] = useState(false);
+
+  const loadNotifications = async () => {
+    setLoading(true);
+    try {
+      const fetched = await fetchNotifications(20);
+      if (fetched && fetched.length > 0) {
+        setNotifications(fetched);
+        setUnseenCount(fetched.filter(n => !n.seen).length);
+      }
+    } catch (e) {
+      console.warn("Using offline default notifications:", e);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!user) {
@@ -57,35 +52,31 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const fetchSupabaseNotifications = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('notifications')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(20);
-
-        if (!error && data && data.length > 0) {
-          const fetched: Notification[] = data.map((d: any) => ({
-            id: d.id,
-            title: d.title || 'Notifikasi Bakery',
-            body: d.body || d.message || '',
-            type: d.type || 'info',
-            seen: Boolean(d.seen || d.read),
-            timestamp: d.created_at || new Date().toISOString(),
-          }));
-          setNotifications(fetched);
-          setUnseenCount(fetched.filter(n => !n.seen).length);
-        }
-      } catch (e) {
-        console.warn("Using offline default notifications:", e);
-      }
-    };
-
-    fetchSupabaseNotifications();
+    loadNotifications();
   }, [user]);
 
-  const value = { notifications, unseenCount, loading };
+  const markAsSeen = async (id: string) => {
+    // Optimistic UI update
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, seen: true } : n));
+    setUnseenCount(prev => Math.max(0, prev - 1));
+    await markNotificationAsSeen(id);
+  };
+
+  const markAllAsSeen = async () => {
+    // Optimistic UI update
+    setNotifications(prev => prev.map(n => ({ ...n, seen: true })));
+    setUnseenCount(0);
+    await markAllNotificationsAsSeen();
+  };
+
+  const value = {
+    notifications,
+    unseenCount,
+    loading,
+    markAsSeen,
+    markAllAsSeen,
+    refreshNotifications: loadNotifications,
+  };
 
   return <NotificationContext.Provider value={value}>{children}</NotificationContext.Provider>;
 }

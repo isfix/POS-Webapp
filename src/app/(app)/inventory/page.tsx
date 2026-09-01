@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+import { withFallback, mutateWithLocalSync } from '@/lib/db';
 import { useToast } from '@/hooks/use-toast';
 
 import { InventoryTable, type InventoryItem } from '@/components/inventory/inventory-table';
@@ -24,14 +25,11 @@ export default function InventoryPage() {
   useEffect(() => {
     const fetchSupabaseInventory = async () => {
       setLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from('inventory')
-          .select('*')
-          .order('name', { ascending: true });
-
-        if (!error && data) {
-          const items: InventoryItem[] = data.map((d: any) => ({
+      const items = await withFallback<InventoryItem>(
+        () => supabase.from('inventory').select('*').order('name', { ascending: true }),
+        'rotikita_inventory',
+        {
+          transform: (data) => data.map((d: any) => ({
             id: d.id,
             name: d.name,
             category: d.category,
@@ -42,30 +40,15 @@ export default function InventoryPage() {
             expirationDate: d.expiration_date || d.expirationDate,
             costPerUnit: Number(d.cost_per_unit || d.costPerUnit || 0),
             lastUpdated: d.updated_at || d.lastUpdated || new Date().toISOString(),
-          }));
-          setInventoryItems(items);
-          localStorage.setItem('pos_inventory', JSON.stringify(items));
-        } else {
-          const saved = localStorage.getItem('pos_inventory');
-          if (saved) setInventoryItems(JSON.parse(saved));
+          })),
         }
-      } catch (e) {
-        const saved = localStorage.getItem('pos_inventory');
-        if (saved) setInventoryItems(JSON.parse(saved));
-      } finally {
-        setLoading(false);
-      }
+      );
+      setInventoryItems(items);
+      setLoading(false);
     };
 
     fetchSupabaseInventory();
   }, []);
-  
-  const saveLocalInventory = (items: InventoryItem[]) => {
-    setInventoryItems(items);
-    try {
-      localStorage.setItem('pos_inventory', JSON.stringify(items));
-    } catch (e) {}
-  };
 
   const handleAddItem = async (newItemData: Omit<InventoryItem, 'id' | 'lastUpdated'>) => {
     const tempId = `inv-${Date.now()}`;
@@ -75,11 +58,11 @@ export default function InventoryPage() {
       lastUpdated: new Date().toISOString(),
     };
     const updated = [newItem, ...inventoryItems];
-    saveLocalInventory(updated);
+    setInventoryItems(updated);
     toast({ title: 'Berhasil', description: 'Stok bahan baku baru berhasil ditambahkan.' });
 
-    try {
-      const { data, error } = await supabase.from('inventory').insert([{
+    await mutateWithLocalSync('rotikita_inventory', updated, () =>
+      supabase.from('inventory').insert([{
         name: newItemData.name,
         category: newItemData.category,
         quantity: newItemData.quantity,
@@ -88,27 +71,17 @@ export default function InventoryPage() {
         supplier: newItemData.supplier,
         expiration_date: newItemData.expirationDate,
         cost_per_unit: newItemData.costPerUnit,
-      }]).select().single();
-
-      if (data && !error) {
-        setInventoryItems(prev => prev.map(item => item.id === tempId ? {
-          ...item,
-          id: data.id,
-          lastUpdated: data.updated_at || item.lastUpdated,
-        } : item));
-      }
-    } catch (error) {
-      console.warn("Saved to local storage fallback");
-    }
+      }])
+    );
   };
   
   const handleEditItem = async (itemToUpdate: InventoryItem) => {
     const updated = inventoryItems.map(item => item.id === itemToUpdate.id ? itemToUpdate : item);
-    saveLocalInventory(updated);
+    setInventoryItems(updated);
     toast({ title: 'Berhasil', description: 'Data bahan baku berhasil diperbarui.' });
 
-    try {
-      await supabase.from('inventory').update({
+    await mutateWithLocalSync('rotikita_inventory', updated, () =>
+      supabase.from('inventory').update({
         name: itemToUpdate.name,
         category: itemToUpdate.category,
         quantity: itemToUpdate.quantity,
@@ -117,22 +90,18 @@ export default function InventoryPage() {
         supplier: itemToUpdate.supplier,
         expiration_date: itemToUpdate.expirationDate,
         cost_per_unit: itemToUpdate.costPerUnit,
-      }).eq('id', itemToUpdate.id);
-    } catch (error) {
-      console.warn("Updated local storage fallback");
-    }
+      }).eq('id', itemToUpdate.id)
+    );
   };
 
   const handleDeleteItem = async (itemToDelete: InventoryItem) => {
     const filtered = inventoryItems.filter(item => item.id !== itemToDelete.id);
-    saveLocalInventory(filtered);
+    setInventoryItems(filtered);
     toast({ title: 'Berhasil', description: 'Bahan baku berhasil dihapus.' });
 
-    try {
-      await supabase.from('inventory').delete().eq('id', itemToDelete.id);
-    } catch (error) {
-      console.warn("Deleted from local storage fallback");
-    }
+    await mutateWithLocalSync('rotikita_inventory', filtered, () =>
+      supabase.from('inventory').delete().eq('id', itemToDelete.id)
+    );
   };
 
   const summaryStats = useMemo(() => {

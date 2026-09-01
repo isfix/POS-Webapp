@@ -3,75 +3,27 @@ export type ConversationHistory = {
   content: string;
 }[];
 
-const getApiKey = () => {
-  return process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '';
-};
-
 // 1. Conversational Agent (Aura)
 export async function runAgent(
   prompt: string,
   history: ConversationHistory
 ): Promise<string> {
-  const apiKey = getApiKey();
-  
-  if (!apiKey) {
-    // Fallback response if no Gemini API key configured
-    const lower = String(prompt || '').toLowerCase();
-    if (lower.includes('stok') || lower.includes('tepung') || lower.includes('mentega') || lower.includes('ragi')) {
-      return "Sistem mencatat stok bahan baku utama masih dalam batas aman. Anda dapat memantau detailnya di menu 'Stok Bahan'.";
-    }
-    if (lower.includes('menu') || lower.includes('roti') || lower.includes('harga') || lower.includes('produk')) {
-      return "Katalog produk terdaftar aktif. Anda dapat menambahkan produk baru melalui tombol '+ Tambah Produk' di menu Katalog Menu.";
-    }
-    return `Halo! Saya asisten AI POS. Saya siap membantu Anda mengelola pesanan kasir, memantau persediaan barang, dan mencatat transaksi harian. Ada yang bisa saya bantu?`;
-  }
-
   try {
-    const contents = [
-      ...history.map(item => ({
-        role: item.role === 'model' ? 'model' : 'user',
-        parts: [{ text: item.content }],
-      })),
-      {
-        role: 'user',
-        parts: [{ text: prompt }],
-      },
-    ];
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          systemInstruction: {
-            parts: [{
-              text: `Anda adalah asisten AI pintar untuk sistem kasir POS dan manajemen toko. Anda membantu kasir dan staf dalam mengelola katalog produk, memantau bahan/stok, dan mengoptimalkan operasional toko.
-              Gunakan Bahasa Indonesia yang ramah, sopan, ringkas, dan jelas.
-              Bila pengguna meminta konfirmasi untuk aksi hapus produk atau pengubahan stok paksa, awali respon dengan token [CONFIRM].`
-            }],
-          },
-          contents,
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 800,
-          },
-        }),
-      }
-    );
+    const response = await fetch('/api/ai/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, history }),
+    });
 
     if (!response.ok) {
-      const errJson = await response.json().catch(() => ({}));
-      console.warn("Gemini API error:", errJson);
-      return "Saya siap membantu operasional sistem kasir POS. Silakan pilih menu di sidebar untuk melihat stok atau transaksi kasir.";
+      return "Layanan asisten AI sedang tidak dapat diakses saat ini. Silakan coba beberapa saat lagi.";
     }
 
     const data = await response.json();
-    const candidateText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    return candidateText || "Baik, saya siap membantu kebutuhan operasional toko Anda.";
+    return data.text || "Baik, saya siap membantu kebutuhan operasional toko Anda.";
   } catch (error) {
-    console.error("Error in runAgent:", error);
-    return "Maaf, terjadi kendala saat menghubungkan ke asisten AI. Silakan coba kembali sesaat lagi.";
+    console.error("Error in runAgent client:", error);
+    return "Mode offline aktif. Konfigurasikan GEMINI_API_KEY di environment untuk mengaktifkan asisten AI cerdas.";
   }
 }
 
@@ -79,10 +31,26 @@ export async function runAgent(
 export async function aiPoweredDataEntry(input: { naturalLanguageInput: string }): Promise<{
   formData?: { name?: string; category?: string; price?: number };
 }> {
-  const apiKey = getApiKey();
   const text = String(input?.naturalLanguageInput || '');
 
-  // Regex heuristic parser fallback
+  try {
+    const response = await fetch('/api/ai/data-entry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ naturalLanguageInput: text }),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data?.formData) {
+        return data;
+      }
+    }
+  } catch (err) {
+    console.warn("AI parse API unavailable, using local heuristic:", err);
+  }
+
+  // Regex heuristic parser fallback for offline use
   const priceMatch = text.match(/(?:rp|harga|sebesar|rp\.)?\s*([\d.,]+(?:\s*rb|\s*ribu|\s*k)?)/i);
   let parsedPrice = 0;
   if (priceMatch) {
@@ -106,56 +74,12 @@ export async function aiPoweredDataEntry(input: { naturalLanguageInput: string }
     .replace(/(tambah|buat|masukkan|menu|baru|kategori|harga|seharga|rp\.?|\d+)/gi, '')
     .trim()
     .replace(/^['"]|['"]$/g, '');
-  if (!name) name = 'Produk Roti Baru';
-
-  if (!apiKey) {
-    return {
-      formData: {
-        name,
-        category,
-        price: parsedPrice || 12000,
-      },
-    };
-  }
-
-  try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            role: 'user',
-            parts: [{
-              text: `Ekstrak data produk bakery dari kalimat berikut menjadi JSON: "${text}".
-              Format JSON wajib:
-              {"name": "Nama Roti", "category": "Roti Manis|Roti Tawar|Cake & Tart|Pastry & Croissant|Donat & Cookies|Minuman", "price": 15000}
-              Hanya kirimkan raw JSON.`
-            }]
-          }],
-          generationConfig: { responseMimeType: "application/json" }
-        })
-      }
-    );
-
-    if (response.ok) {
-      const data = await response.json();
-      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (rawText) {
-        const parsed = JSON.parse(rawText);
-        return { formData: parsed };
-      }
-    }
-  } catch (err) {
-    console.warn("AI parse failed, using heuristic: ", err);
-  }
 
   return {
     formData: {
-      name,
+      name: name || '',
       category,
-      price: parsedPrice || 12000,
+      price: parsedPrice || 0,
     },
   };
 }
@@ -204,11 +128,13 @@ export async function runGenerateDailyInsights(input: {
 
   return {
     lowStockItems,
-    topSellingItems: topSellingItems.length > 0 ? topSellingItems : ['Roti Manis Cokelat Keju (Terjual 48 pcs)', 'Croissant Butter (Terjual 32 pcs)'],
+    topSellingItems,
     slowMovingItems,
     idleAssets,
     profitAnomalies: [],
-    overallSummary: `Aktivitas penjualan toko roti stabil. ${lowStockItems.length > 0 ? `${lowStockItems.length} bahan baku perlu segera dipesan ulang.` : 'Seluruh persediaan bahan baku berada dalam batas aman.'}`,
+    overallSummary: (input.salesData && input.salesData.length > 0)
+      ? `Aktivitas penjualan toko roti aktif. ${lowStockItems.length > 0 ? `${lowStockItems.length} bahan baku perlu segera dipesan ulang.` : 'Seluruh persediaan bahan baku berada dalam batas aman.'}`
+      : `Belum ada data penjualan pada periode ini. ${lowStockItems.length > 0 ? `${lowStockItems.length} bahan baku menipis dan perlu dipesan ulang.` : 'Seluruh persediaan bahan baku berada dalam batas aman.'}`,
     notifications,
   };
 }
@@ -225,18 +151,61 @@ export async function runAutomatedFinancialProjection(input: {
     sales = JSON.parse(input.historicalSales);
   } catch (e) {}
 
-  const totalSales90Days = sales.reduce((acc, s) => acc + (s.revenue || 0), 0);
-  const avgMonthlyRevenue = totalSales90Days > 0 ? (totalSales90Days / 3) * 1.08 : 35000000;
-  const projectedProfit = avgMonthlyRevenue * 0.42;
+  let expenses: any[] = [];
+  try {
+    expenses = JSON.parse(input.historicalExpenses);
+  } catch (e) {}
+
+  const totalSales = (sales || []).reduce((acc, s) => acc + Number(s.total || s.gross_revenue || s.revenue || 0), 0);
+  const totalExpenses = (expenses || []).reduce((acc, e) => acc + Number(e.amount || 0), 0);
+
+  if (!sales || sales.length === 0 || totalSales === 0) {
+    return {
+      projectedRevenue: 0,
+      projectedProfit: 0,
+      confidenceScore: 0,
+      revenueTrendAnalysis: "Belum ada data transaksi yang cukup untuk menganalisis tren omzet penjualan.",
+      profitMarginAnalysis: "Belum ada data biaya & penjualan untuk menghitung margin laba.",
+      topPerformingItems: [],
+      recommendations: "Mulai catat transaksi penjualan di Kasir POS untuk mengaktifkan analisis dan proyeksi keuangan otomatis.",
+    };
+  }
+
+  // Tally item quantities from actual historical sales
+  const itemCounts: Record<string, number> = {};
+  sales.forEach((s: any) => {
+    if (Array.isArray(s.items)) {
+      s.items.forEach((item: any) => {
+        const name = item.name || 'Produk';
+        itemCounts[name] = (itemCounts[name] || 0) + (Number(item.quantity) || 1);
+      });
+    }
+  });
+
+  const topPerformingItems = Object.entries(itemCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([name, count]) => `${name} (${count} terjual)`);
+
+  const distinctDays = new Set(sales.map(s => s.date).filter(Boolean)).size || 1;
+  const avgDailyRevenue = totalSales / distinctDays;
+  const projectedRevenue = Math.round(avgDailyRevenue * 30);
+  const avgDailyExpense = totalExpenses > 0 ? (totalExpenses / distinctDays) : (avgDailyRevenue * 0.55);
+  const projectedExpense = Math.round(avgDailyExpense * 30);
+  const projectedProfit = Math.max(0, projectedRevenue - projectedExpense);
+  const marginPct = projectedRevenue > 0 ? Math.round((projectedProfit / projectedRevenue) * 100) : 0;
+  const confidence = Math.min(0.95, Math.max(0.4, Number((0.4 + (distinctDays / 30) * 0.5).toFixed(2))));
 
   return {
-    projectedRevenue: Math.round(avgMonthlyRevenue),
-    projectedProfit: Math.round(projectedProfit),
-    confidenceScore: 0.88,
-    revenueTrendAnalysis: "Tren omzet menunjukkan peningkatan 5-8% berkat tingginya minat pada varian Roti Manis dan Pastry sarapan pagi.",
-    profitMarginAnalysis: "Rata-rata margin kotor bakery berada pada 42-45%, dengan efisiensi resep bahan baku yang sangat terkendali.",
-    topPerformingItems: ["Roti Sisir Mentega Spesial", "Croissant Butter", "Roti Cokelat Keju"],
-    recommendations: "Pertahankan persediaan tepung dan mentega impor menjelang akhir pekan untuk mengantisipasi lonjakan permintaan pesanan.",
+    projectedRevenue,
+    projectedProfit,
+    confidenceScore: confidence,
+    revenueTrendAnalysis: `Berdasarkan ${sales.length} transaksi dalam ${distinctDays} hari aktif, rata-rata omzet harian adalah Rp ${Math.round(avgDailyRevenue).toLocaleString('id-ID')}.`,
+    profitMarginAnalysis: `Estimasi margin laba bersih toko sekitar ${marginPct}% dengan proyeksi laba bulanan sebesar Rp ${projectedProfit.toLocaleString('id-ID')}.`,
+    topPerformingItems,
+    recommendations: topPerformingItems.length > 0
+      ? `Pastikan stok bahan baku untuk ${topPerformingItems.join(', ')} terjaga untuk memaksimalkan margin keuntungan.`
+      : "Lakukan pemantauan berkala terhadap stok bahan baku dan arus kas operasional.",
   };
 }
 
