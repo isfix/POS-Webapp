@@ -1,5 +1,3 @@
-'use server';
-
 /**
  * @fileOverview An AI agent for automatically inputting and adjusting data related to cafe updates from staff announcements.
  *

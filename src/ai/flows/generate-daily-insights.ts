@@ -1,4 +1,3 @@
-'use server';
 /**
  * @fileOverview An AI flow to generate daily operational insights and notifications for the cafe.
  */

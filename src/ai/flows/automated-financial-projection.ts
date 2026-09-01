@@ -1,4 +1,3 @@
-'use server';
 /**
  * @fileOverview An AI flow to generate an automated financial projection based on historical data.
  */

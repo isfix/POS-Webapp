@@ -1,142 +1,201 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { db } from '@/lib/firebase';
-import { collection, addDoc, deleteDoc, onSnapshot, query, orderBy, doc, Timestamp, updateDoc } from 'firebase/firestore';
+import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
 
 import { InventoryTable, type InventoryItem } from '@/components/inventory/inventory-table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { DollarSign, AlertTriangle } from 'lucide-react';
+import { DollarSign, AlertTriangle, Layers } from 'lucide-react';
 
 const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('id-ID', {
-        style: 'currency',
-        currency: 'IDR',
-        minimumFractionDigits: 0,
-    }).format(value);
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0,
+  }).format(value);
 };
 
 export default function InventoryPage() {
-    const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
-    const [loading, setLoading] = useState(true);
-    const { toast } = useToast();
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
-    useEffect(() => {
-        const q = query(collection(db, 'inventory'), orderBy('name'));
-        const unsubscribe = onSnapshot(q, (querySnapshot) => {
-            const items: InventoryItem[] = [];
-            querySnapshot.forEach((doc) => {
-                const data = doc.data();
-                items.push({ 
-                    id: doc.id,
-                    ...data,
-                    // Ensure timestamps are correctly handled if they exist
-                    expirationDate: data.expirationDate instanceof Timestamp ? data.expirationDate : undefined,
-                    lastUpdated: data.lastUpdated instanceof Timestamp ? data.lastUpdated : Timestamp.now(),
-                 } as InventoryItem);
-            });
-            setInventoryItems(items);
-            setLoading(false);
-        }, (error) => {
-            console.error("Error fetching inventory items: ", error);
-            toast({ title: 'Error', description: 'Could not fetch inventory items.', variant: 'destructive'});
-            setLoading(false);
-        });
+  useEffect(() => {
+    const fetchSupabaseInventory = async () => {
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('inventory')
+          .select('*')
+          .order('name', { ascending: true });
 
-        return () => unsubscribe();
-    }, []);
-    
-    const addActivityLog = async (action: string) => {
-        try {
-            await addDoc(collection(db, 'activityLogs'), {
-                user: 'Admin', // Assuming the user is always Admin for now
-                action,
-                timestamp: Timestamp.now(),
-            });
-        } catch (error) {
-            console.error("Error adding activity log: ", error);
+        if (!error && data) {
+          const items: InventoryItem[] = data.map((d: any) => ({
+            id: d.id,
+            name: d.name,
+            category: d.category,
+            quantity: Number(d.quantity || 0),
+            unitType: d.unit_type || d.unitType || 'kg',
+            minThreshold: Number(d.min_threshold || d.minThreshold || 0),
+            supplier: d.supplier || '',
+            expirationDate: d.expiration_date || d.expirationDate,
+            costPerUnit: Number(d.cost_per_unit || d.costPerUnit || 0),
+            lastUpdated: d.updated_at || d.lastUpdated || new Date().toISOString(),
+          }));
+          setInventoryItems(items);
+          localStorage.setItem('pos_inventory', JSON.stringify(items));
+        } else {
+          const saved = localStorage.getItem('pos_inventory');
+          if (saved) setInventoryItems(JSON.parse(saved));
         }
+      } catch (e) {
+        const saved = localStorage.getItem('pos_inventory');
+        if (saved) setInventoryItems(JSON.parse(saved));
+      } finally {
+        setLoading(false);
+      }
     };
 
-    const handleAddItem = async (newItemData: Omit<InventoryItem, 'id' | 'lastUpdated'>) => {
-        try {
-            const dataWithTimestamp = { ...newItemData, lastUpdated: Timestamp.now() };
-            const docRef = await addDoc(collection(db, 'inventory'), dataWithTimestamp);
-            addActivityLog(`Added new inventory item '${newItemData.name}' with ID ${docRef.id}`);
-            toast({ title: 'Success', description: 'New inventory item added.' });
-        } catch (error) {
-            console.error("Error adding document: ", error);
-            toast({ title: 'Error', description: 'Failed to add inventory item.', variant: 'destructive' });
-        }
-    };
-    
-    const handleEditItem = async (itemToUpdate: InventoryItem) => {
-       try {
-            const itemDocRef = doc(db, 'inventory', itemToUpdate.id);
-            const { id, ...dataToUpdate } = itemToUpdate;
-            const dataWithTimestamp = { ...dataToUpdate, lastUpdated: Timestamp.now() };
-            await updateDoc(itemDocRef, dataWithTimestamp as any);
-            addActivityLog(`Updated inventory item '${itemToUpdate.name}'`);
-            toast({ title: 'Success', description: 'Inventory item updated.' });
-       } catch (error) {
-            console.error("Error updating document: ", error);
-            toast({ title: 'Error', description: 'Failed to update inventory item.', variant: 'destructive' });
-       }
-    };
+    fetchSupabaseInventory();
+  }, []);
+  
+  const saveLocalInventory = (items: InventoryItem[]) => {
+    setInventoryItems(items);
+    try {
+      localStorage.setItem('pos_inventory', JSON.stringify(items));
+    } catch (e) {}
+  };
 
-    const handleDeleteItem = async (itemToDelete: InventoryItem) => {
-       try {
-            await deleteDoc(doc(db, 'inventory', itemToDelete.id));
-            addActivityLog(`Deleted inventory item '${itemToDelete.name}'`);
-            toast({ title: 'Success', description: 'Inventory item deleted.' });
-       } catch (error) {
-            console.error("Error deleting document: ", error);
-            toast({ title: 'Error', description: 'Failed to delete inventory item.', variant: 'destructive' });
-       }
+  const handleAddItem = async (newItemData: Omit<InventoryItem, 'id' | 'lastUpdated'>) => {
+    const tempId = `inv-${Date.now()}`;
+    const newItem: InventoryItem = {
+      ...newItemData,
+      id: tempId,
+      lastUpdated: new Date().toISOString(),
     };
+    const updated = [newItem, ...inventoryItems];
+    saveLocalInventory(updated);
+    toast({ title: 'Berhasil', description: 'Stok bahan baku baru berhasil ditambahkan.' });
 
-    const summaryStats = useMemo(() => {
-        const totalValue = inventoryItems.reduce((acc, item) => acc + (item.quantity * item.costPerUnit), 0);
-        const lowStockItems = inventoryItems.filter(item => item.quantity <= item.minThreshold).length;
-        return { totalValue, lowStockItems };
-    }, [inventoryItems]);
+    try {
+      const { data, error } = await supabase.from('inventory').insert([{
+        name: newItemData.name,
+        category: newItemData.category,
+        quantity: newItemData.quantity,
+        unit_type: newItemData.unitType,
+        min_threshold: newItemData.minThreshold,
+        supplier: newItemData.supplier,
+        expiration_date: newItemData.expirationDate,
+        cost_per_unit: newItemData.costPerUnit,
+      }]).select().single();
 
-    return (
-        <div className="space-y-6">
-            <div>
-                <h1 className="text-2xl font-bold">Inventory Management</h1>
-                <p className="text-muted-foreground">Track and manage your cafe's stock levels.</p>
+      if (data && !error) {
+        setInventoryItems(prev => prev.map(item => item.id === tempId ? {
+          ...item,
+          id: data.id,
+          lastUpdated: data.updated_at || item.lastUpdated,
+        } : item));
+      }
+    } catch (error) {
+      console.warn("Saved to local storage fallback");
+    }
+  };
+  
+  const handleEditItem = async (itemToUpdate: InventoryItem) => {
+    const updated = inventoryItems.map(item => item.id === itemToUpdate.id ? itemToUpdate : item);
+    saveLocalInventory(updated);
+    toast({ title: 'Berhasil', description: 'Data bahan baku berhasil diperbarui.' });
+
+    try {
+      await supabase.from('inventory').update({
+        name: itemToUpdate.name,
+        category: itemToUpdate.category,
+        quantity: itemToUpdate.quantity,
+        unit_type: itemToUpdate.unitType,
+        min_threshold: itemToUpdate.minThreshold,
+        supplier: itemToUpdate.supplier,
+        expiration_date: itemToUpdate.expirationDate,
+        cost_per_unit: itemToUpdate.costPerUnit,
+      }).eq('id', itemToUpdate.id);
+    } catch (error) {
+      console.warn("Updated local storage fallback");
+    }
+  };
+
+  const handleDeleteItem = async (itemToDelete: InventoryItem) => {
+    const filtered = inventoryItems.filter(item => item.id !== itemToDelete.id);
+    saveLocalInventory(filtered);
+    toast({ title: 'Berhasil', description: 'Bahan baku berhasil dihapus.' });
+
+    try {
+      await supabase.from('inventory').delete().eq('id', itemToDelete.id);
+    } catch (error) {
+      console.warn("Deleted from local storage fallback");
+    }
+  };
+
+  const summaryStats = useMemo(() => {
+    const totalValue = inventoryItems.reduce((acc, item) => acc + (item.quantity * item.costPerUnit), 0);
+    const lowStockItems = inventoryItems.filter(item => item.quantity <= item.minThreshold).length;
+    const totalItemTypes = inventoryItems.length;
+    return { totalValue, lowStockItems, totalItemTypes };
+  }, [inventoryItems]);
+
+  return (
+    <div className="space-y-4">
+      {/* Header Info */}
+      <div>
+        <h1 className="text-xl font-bold text-foreground">Stok Bahan & Logistik</h1>
+        <p className="text-xs text-muted-foreground">Kelola persediaan bahan baku, stok barang, dan logistik toko.</p>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Nilai Stok Bahan</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold tracking-tight text-foreground">{formatCurrency(summaryStats.totalValue)}</div>
+            <p className="text-xs text-muted-foreground mt-1">Estimasi aset bahan baku</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Jumlah Jenis Bahan</CardTitle>
+            <Layers className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold tracking-tight text-foreground">{summaryStats.totalItemTypes} Jenis</div>
+            <p className="text-xs text-muted-foreground mt-1">Bahan aktif terdaftar</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Bahan Kritis / Menipis</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-bold tracking-tight ${summaryStats.lowStockItems > 0 ? 'text-destructive' : 'text-foreground'}`}>
+              {summaryStats.lowStockItems} Bahan
             </div>
+            <p className="text-xs text-muted-foreground mt-1">Stok di bawah batas minimum</p>
+          </CardContent>
+        </Card>
+      </div>
 
-             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Inventory Value</CardTitle>
-                        <DollarSign className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{formatCurrency(summaryStats.totalValue)}</div>
-                    </CardContent>
-                </Card>
-                 <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Items Below Threshold</CardTitle>
-                        <AlertTriangle className="h-4 w-4 text-destructive" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{summaryStats.lowStockItems}</div>
-                    </CardContent>
-                </Card>
-            </div>
-
-            <InventoryTable
-                inventoryItems={inventoryItems}
-                onAddItem={handleAddItem}
-                onEditItem={handleEditItem}
-                onDeleteItem={handleDeleteItem}
-                loading={loading}
-            />
-        </div>
-    )
+      {/* Main Table */}
+      <InventoryTable
+        inventoryItems={inventoryItems}
+        onAddItem={handleAddItem}
+        onEditItem={handleEditItem}
+        onDeleteItem={handleDeleteItem}
+        loading={loading}
+      />
+    </div>
+  );
 }

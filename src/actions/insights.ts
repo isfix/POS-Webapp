@@ -1,116 +1,107 @@
-'use server';
-
-import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, Timestamp, setDoc, doc, orderBy, limit, writeBatch } from 'firebase/firestore';
-import { runGenerateDailyInsights } from '@/ai/flows/generate-daily-insights';
-import type { DailyInsightsOutput } from '@/ai/flows/generate-daily-insights';
+import { supabase } from '@/lib/supabase';
+import { runGenerateDailyInsights } from '@/actions/ai';
 import { subDays, format } from 'date-fns';
 
-export type DailyInsight = Omit<DailyInsightsOutput, 'notifications'> & {
-    id: string;
-    timestamp: Timestamp;
+export type NotificationItem = {
+  title: string;
+  body: string;
+  type: 'low_stock' | 'slow_moving' | 'idle_asset' | 'profit_anomaly';
 };
 
-// This is the main action to trigger the analysis
+export type DailyInsightsOutput = {
+  lowStockItems: string[];
+  topSellingItems: string[];
+  slowMovingItems: string[];
+  idleAssets: string[];
+  profitAnomalies: string[];
+  overallSummary: string;
+  notifications: NotificationItem[];
+};
+
+export type DailyInsight = Omit<DailyInsightsOutput, 'notifications'> & {
+  id: string;
+  timestamp: string | Date;
+};
+
+// Main action to trigger daily bakery analysis
 export async function generateAndStoreDailyAnalysis(): Promise<DailyInsight | null> {
+  try {
+    const fourteenDaysAgo = subDays(new Date(), 14).toISOString();
+    const { data: orders } = await supabase.from('orders').select('*').gte('created_at', fourteenDaysAgo);
+    const { data: inventory } = await supabase.from('inventory').select('*');
+    const { data: assets } = await supabase.from('assets').select('*');
+
+    const salesData: any[] = [];
+    (orders || []).forEach((order: any) => {
+      const items = order.items || [];
+      items.forEach((item: any) => {
+        const itemCost = item.costPrice || (item.price * 0.55);
+        const profit = (item.price - itemCost) * item.quantity;
+        salesData.push({
+          name: item.name,
+          quantity: item.quantity,
+          profit,
+          date: new Date(order.created_at || Date.now()).toISOString().split('T')[0],
+        });
+      });
+    });
+
+    const analysisResult = await runGenerateDailyInsights({
+      salesData,
+      inventoryData: inventory || [],
+      assetData: assets || [],
+    });
+
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const { notifications, ...insightData } = analysisResult;
+
+    const fullInsightData: DailyInsight = {
+      ...insightData,
+      id: todayStr,
+      timestamp: new Date().toISOString(),
+    };
+
     try {
-        // 1. Fetch Data from Firestore
-        const fourteenDaysAgo = subDays(new Date(), 14);
-        const salesQuery = query(collection(db, 'orders'), where('timestamp', '>=', fourteenDaysAgo));
-        const inventoryQuery = query(collection(db, 'inventory'));
-        const assetsQuery = query(collection(db, 'assets'));
+      await supabase.from('daily_insights').upsert({
+        id: todayStr,
+        ...insightData,
+      });
 
-        const [salesSnapshot, inventorySnapshot, assetsSnapshot] = await Promise.all([
-            getDocs(salesQuery),
-            getDocs(inventoryQuery),
-            getDocs(assetsQuery),
-        ]);
-        
-        // 2. Process data for the AI flow
-        const salesData = salesSnapshot.docs.flatMap(doc => {
-            const order = doc.data();
-            return order.items.map((item: any) => ({
-                name: item.name,
-                quantity: item.quantity,
-                profit: (item.price - item.costPrice) * item.quantity,
-                date: (order.timestamp as Timestamp).toDate().toISOString(),
-            }));
-        });
-        
-        const inventoryData = inventorySnapshot.docs.map(doc => {
-            const item = doc.data();
-            return {
-                name: item.name,
-                quantity: item.quantity,
-                minThreshold: item.minThreshold,
-                lastUpdated: (item.lastUpdated as Timestamp).toDate().toISOString(),
-            };
-        });
-        
-        const assetData = assetsSnapshot.docs.map(doc => {
-            const asset = doc.data();
-            return {
-                name: asset.name,
-                status: asset.status,
-                assignedTo: asset.assignedTo,
-                maintenanceDate: asset.maintenanceDate ? (asset.maintenanceDate as Timestamp).toDate().toISOString() : undefined,
-                purchaseDate: (asset.purchaseDate as Timestamp).toDate().toISOString(),
-            };
-        });
-
-        // 3. Call the AI Flow
-        const insightsAndNotifications = await runGenerateDailyInsights({ salesData, inventoryData, assetData });
-        
-        const { notifications, ...insights } = insightsAndNotifications;
-        
-        const today = format(new Date(), 'yyyy-MM-dd');
-        const insightDocRef = doc(db, 'dailyInsights', today);
-        const insightData = {
-            ...insights,
-            timestamp: Timestamp.now(),
-        };
-
-        const batch = writeBatch(db);
-
-        // Set the insight document
-        batch.set(insightDocRef, insightData);
-
-        // Add new notification documents
-        if (notifications && notifications.length > 0) {
-            notifications.forEach(notification => {
-                const notificationRef = doc(collection(db, 'notifications'));
-                batch.set(notificationRef, {
-                    ...notification,
-                    seen: false,
-                    timestamp: Timestamp.now(),
-                });
-            });
-        }
-        
-        await batch.commit();
-
-        return { id: today, ...insightData };
-
-    } catch (error) {
-        console.error("Error generating daily analysis:", error);
-        throw new Error("Failed to generate daily analysis.");
+      if (notifications && notifications.length > 0) {
+        const notifInserts = notifications.map(notif => ({
+          title: notif.title,
+          body: notif.body,
+          type: notif.type,
+          seen: false,
+        }));
+        await supabase.from('notifications').insert(notifInserts);
+      }
+    } catch (e) {
+      console.warn("Saved insight locally (Supabase offline)");
     }
+
+    return fullInsightData;
+  } catch (error) {
+    console.error("Error in generateAndStoreDailyAnalysis: ", error);
+    return null;
+  }
 }
 
-// Action to get the latest insight
-export async function getLatestDailyInsight(): Promise<DailyInsight | null> {
-    try {
-        const q = query(collection(db, 'dailyInsights'), orderBy('timestamp', 'desc'), limit(1));
-        const querySnapshot = await getDocs(q);
+export async function getLatestDailyAnalysis(): Promise<DailyInsight | null> {
+  try {
+    const { data, error } = await supabase
+      .from('daily_insights')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(1);
 
-        if (querySnapshot.empty) {
-            return null;
-        }
-
-        const doc = querySnapshot.docs[0];
-        return { id: doc.id, ...doc.data() } as DailyInsight;
-    } catch (error) {
-        console.error("Error fetching latest daily insight:", error);
-        return null;
+    if (!error && data && data.length > 0) {
+      return data[0] as DailyInsight;
     }
+    return null;
+  } catch (error) {
+    return null;
+  }
 }
+
+export const getLatestDailyInsight = getLatestDailyAnalysis;

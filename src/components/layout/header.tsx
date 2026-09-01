@@ -1,81 +1,70 @@
 'use client';
-import { useState, useEffect } from 'react';
+
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { usePathname } from 'next/navigation';
-import { SIDENAV_ITEMS } from '@/lib/constants';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
-import { auth } from '@/lib/firebase';
-import { signOut } from 'firebase/auth';
-import { LogOut } from 'lucide-react';
+import { LogOut, Sparkles } from 'lucide-react';
 import { NotificationBell } from './notification-bell';
-import { cn } from '@/lib/utils';
+import { Separator } from '@/components/ui/separator';
+import Link from 'next/link';
+
+const TITLE_MAP: Record<string, string> = {
+  'dashboard': 'Dasbor Utama',
+  'pos': 'Kasir Penjualan (POS)',
+  'inventory': 'Stok Bahan & Gudang',
+  'data': 'Katalog Menu & HPP',
+  'assets': 'Aset & Peralatan',
+  'daily-sales': 'Laporan Penjualan Harian',
+  'end-of-day': 'Rekap Tutup Kasir (EOD)',
+  'end-of-month': 'Rekapitulasi Bulanan',
+  'financial-statements': 'Laporan Laba Rugi (P&L)',
+  'expenses': 'Beban & Biaya Operasional',
+  'projections': 'Proyeksi Keuangan 30 Hari',
+  'ai-tools': 'Asisten AI',
+  'settings': 'Pengaturan Sistem',
+};
 
 export function Header() {
-  const [scrolled, setScrolled] = useState(false);
   const pathname = usePathname();
-  const { user } = useAuth();
-
-  useEffect(() => {
-    const mainContent = document.querySelector('main > div[class*="overflow-y-auto"]');
-    
-    const handleScroll = (e: Event) => {
-        const target = e.target as HTMLElement;
-        setScrolled(target.scrollTop > 10);
-    };
-
-    mainContent?.addEventListener('scroll', handleScroll);
-    return () => {
-      mainContent?.removeEventListener('scroll', handleScroll);
-    };
-  }, []);
-
-
-  const handleSignOut = async () => {
-    await signOut(auth);
-    // The AuthProvider and RequireAuth components will handle redirecting to /login
-  };
-
+  const { user, logout } = useAuth();
 
   const getPageTitle = () => {
-    for (const item of SIDENAV_ITEMS) {
-      if (item.path === pathname) return item.title;
-      if (item.submenu) {
-        for (const subItem of item.subMenuItems) {
-          if (subItem.path === pathname) return subItem.title;
-        }
-      }
-    }
-    // Fallback for pages not in nav or dynamic routes
     const segments = pathname.split('/').filter(Boolean);
-    if(segments.length === 0) return "Dashboard";
-    return segments[segments.length - 1]
-      .replace(/-/g, ' ')
-      .split(' ')
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
+    if (segments.length === 0) return TITLE_MAP['dashboard'];
+    const lastSegment = segments[segments.length - 1];
+    return TITLE_MAP[lastSegment] || lastSegment.replace(/-/g, ' ');
   };
 
+  const title = getPageTitle();
 
   return (
-    <header
-      className={cn(
-        'sticky z-10 flex h-16 shrink-0 items-center gap-4 px-4 transition-all duration-300 md:px-6',
-        scrolled
-          ? 'top-0 md:top-2 md:mx-2 md:rounded-lg glass-pane'
-          : 'top-0 rounded-t-lg border-b border-transparent'
-      )}
-    >
-      <div className="md:hidden">
-        <SidebarTrigger />
+    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-3 px-4 bg-background border-b border-border">
+      <div className="flex items-center gap-2.5">
+        <SidebarTrigger className="h-8 w-8 text-foreground" />
+        <Separator orientation="vertical" className="h-4 mr-1" />
+        <h1 className="text-sm font-semibold text-foreground tracking-tight">
+          {title}
+        </h1>
       </div>
-      <h1 className="text-lg font-semibold md:text-xl">{getPageTitle()}</h1>
+
       {user && (
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex items-center gap-2">
+          <Link href="/ai-tools">
+            <Button variant="outline" size="sm" className="hidden sm:flex items-center gap-1.5 h-8 text-xs font-medium">
+              <Sparkles className="h-3.5 w-3.5 text-primary" />
+              Asisten AI
+            </Button>
+          </Link>
           <NotificationBell />
-          <Button variant="ghost" size="sm" onClick={handleSignOut}>
-            <LogOut className="mr-2 h-4 w-4" />
-            Sign Out
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={logout}
+            className="text-muted-foreground hover:text-destructive h-8 text-xs font-medium px-2.5"
+          >
+            <LogOut className="mr-1.5 h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Keluar</span>
           </Button>
         </div>
       )}

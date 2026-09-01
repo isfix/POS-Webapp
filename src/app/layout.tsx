@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import { SidebarProvider } from '@/components/ui/sidebar';
 import { Toaster } from '@/components/ui/toaster';
 import { Inter } from 'next/font/google';
 import { AuthProvider } from '@/context/AuthContext';
@@ -9,8 +8,8 @@ import { NotificationProvider } from '@/context/NotificationContext';
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
 export const metadata: Metadata = {
-  title: 'BrewFlow',
-  description: 'AI-Powered Cafe Management',
+  title: 'Point of Sale & Management System',
+  description: 'Sistem Kasir POS & Manajemen Operasional',
 };
 
 export default function RootLayout({
@@ -19,7 +18,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning className={inter.variable}>
+    <html lang="id" suppressHydrationWarning className={inter.variable}>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -31,9 +30,7 @@ export default function RootLayout({
       <body className="font-body antialiased">
         <AuthProvider>
           <NotificationProvider>
-            <SidebarProvider>
             {children}
-            </SidebarProvider>
             <Toaster />
           </NotificationProvider>
         </AuthProvider>

@@ -1,5 +1,4 @@
 // src/ai/flows/natural-language-data-entry.ts
-'use server';
 
 /**
  * @fileOverview Parses natural language input to pre-fill form data.

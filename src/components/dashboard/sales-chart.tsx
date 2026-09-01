@@ -1,6 +1,6 @@
 'use client';
 
-import { Bar, BarChart, XAxis, YAxis, Tooltip } from 'recharts';
+import { Bar, BarChart, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   ChartContainer,
@@ -10,62 +10,77 @@ import {
 
 const chartConfig = {
   sales: {
-    label: 'Sales',
-    color: 'hsl(var(--primary))',
+    label: 'Penjualan',
+    color: 'var(--primary)',
   },
 } satisfies ChartConfig;
 
 const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('id-ID', {
-        style: 'currency',
-        currency: 'IDR',
-        minimumFractionDigits: 0,
-    }).format(value);
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0,
+  }).format(value);
 };
 
-const formatChartCurrency = (value: number) => `Rp ${Math.floor(value / 1000)}k`;
+const formatTickNumber = (value: number) => {
+  if (value >= 1000000) return `${(value / 1000000).toFixed(1)}jt`;
+  if (value >= 1000) return `${Math.round(value / 1000)}rb`;
+  return `${value}`;
+};
 
 type SalesChartProps = {
-    chartData: { date: string; sales: number }[];
-    className?: string;
-}
+  chartData: { date: string; sales: number }[];
+  className?: string;
+};
 
 export function SalesChart({ chartData, className }: SalesChartProps) {
+  const totalSales = chartData.reduce((acc, curr) => acc + (curr.sales || 0), 0);
+
   return (
     <Card className={className}>
-      <CardHeader>
-        <CardTitle>Weekly Sales</CardTitle>
-        <CardDescription>Sales overview for the last 7 days.</CardDescription>
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <div>
+          <CardTitle className="text-sm font-semibold">Tren Penjualan Harian</CardTitle>
+          <CardDescription className="text-xs">Omzet kotor 7 hari terakhir</CardDescription>
+        </div>
+        <div className="text-right">
+          <span className="text-xs font-semibold text-primary">{formatCurrency(totalSales)}</span>
+        </div>
       </CardHeader>
-      <CardContent className="pl-2">
-        <div className="h-[350px]">
+      <CardContent className="pt-0 pb-3">
+        <div className="h-[180px] w-full">
           <ChartContainer config={chartConfig} className="h-full w-full">
-              <BarChart accessibilityLayer data={chartData}>
-                <XAxis
-                  dataKey="date"
-                  stroke="#888888"
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <YAxis
-                  stroke="#888888"
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={formatChartCurrency}
-                />
-                <Tooltip
-                  cursor={false}
-                  content={<ChartTooltipContent indicator="dot" formatter={(value) => formatCurrency(value as number)} />}
-                />
-                <Bar
-                  dataKey="sales"
-                  fill="var(--color-sales)"
-                  radius={[4, 4, 0, 0]}
-                />
-              </BarChart>
-            </ChartContainer>
+            <BarChart data={chartData} margin={{ top: 8, right: 8, left: 10, bottom: 0 }}>
+              <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-muted/40" />
+              <XAxis
+                dataKey="date"
+                stroke="#888888"
+                fontSize={11}
+                tickLine={false}
+                axisLine={false}
+                dy={4}
+              />
+              <YAxis
+                stroke="#888888"
+                fontSize={10}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={formatTickNumber}
+                width={48}
+              />
+              <Tooltip
+                cursor={{ fill: 'var(--muted)', opacity: 0.3 }}
+                content={<ChartTooltipContent indicator="dot" formatter={(value) => formatCurrency(value as number)} />}
+              />
+              <Bar
+                dataKey="sales"
+                fill="var(--primary)"
+                radius={[4, 4, 0, 0]}
+                maxBarSize={28}
+              />
+            </BarChart>
+          </ChartContainer>
         </div>
       </CardContent>
     </Card>

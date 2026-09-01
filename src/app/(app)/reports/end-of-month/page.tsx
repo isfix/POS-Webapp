@@ -1,281 +1,249 @@
 'use client';
+
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Download, Banknote, QrCode } from 'lucide-react';
-import { Bar, BarChart, XAxis, YAxis, Tooltip } from 'recharts';
-import { ChartTooltipContent, ChartContainer, type ChartConfig } from '@/components/ui/chart';
-import { db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
+import { Download, Banknote, QrCode, TrendingUp, DollarSign } from 'lucide-react';
+import { Bar, BarChart, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { supabase } from '@/lib/supabase';
 import { startOfMonth, endOfMonth, format, eachDayOfInterval } from 'date-fns';
+import { id as idLocale } from 'date-fns/locale';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import * as xlsx from 'xlsx';
+import { parseSafeDate } from '@/lib/utils';
 
 type MonthlyData = {
-    date: string;
-    sales: number;
+  date: string;
+  sales: number;
 };
 
 type MonthlySummary = {
-    totalSales: number;
-    totalCashSales: number;
-    totalQrisSales: number;
-    busiestDay: { day: string, sales: number };
+  totalSales: number;
+  totalCashSales: number;
+  totalQrisSales: number;
+  busiestDay: { day: string; sales: number };
 };
 
-const chartConfig = {
-    sales: {
-      label: 'Sales',
-      color: 'hsl(var(--primary))',
-    },
-} satisfies ChartConfig;
-
 const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('id-ID', {
-        style: 'currency',
-        currency: 'IDR',
-        minimumFractionDigits: 0,
-    }).format(value);
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0,
+  }).format(value);
 };
 
 const formatChartCurrency = (value: number) => `Rp ${Math.floor(value / 1000)}k`;
 
 export default function EndOfMonthReportPage() {
-    const [chartData, setChartData] = useState<MonthlyData[]>([]);
-    const [summary, setSummary] = useState<MonthlySummary | null>(null);
-    const [loading, setLoading] = useState(true);
-    const { toast } = useToast();
+  const [chartData, setChartData] = useState<MonthlyData[]>([]);
+  const [summary, setSummary] = useState<MonthlySummary | null>(null);
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
 
-    useEffect(() => {
+  const calculateMonthlyData = (orders: any[]) => {
+    const today = new Date();
+    const monthStart = startOfMonth(today);
+    const monthEnd = endOfMonth(today);
+
+    const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
+    const dailySales: Record<string, number> = {};
+    daysInMonth.forEach(day => {
+      dailySales[format(day, 'dd')] = 0;
+    });
+
+    let totalSales = 0;
+    let totalCashSales = 0;
+    let totalQrisSales = 0;
+
+    (Array.isArray(orders) ? orders : []).forEach((ord) => {
+      const dateObj = parseSafeDate(ord.created_at || ord.timestamp);
+      const day = format(dateObj, 'dd');
+      const amount = Number(ord.gross_revenue || ord.grossRevenue || ord.total || 0);
+      
+      totalSales += amount;
+      if (dailySales[day] !== undefined) {
+        dailySales[day] += amount;
+      }
+
+      if (ord.payment_method === 'cash' || ord.payment_method === 'Tunai' || ord.paymentMethod === 'cash' || ord.paymentMethod === 'Tunai') {
+        totalCashSales += amount;
+      } else {
+        totalQrisSales += amount;
+      }
+    });
+
+    const formattedChartData = Object.entries(dailySales).map(([date, sales]) => ({
+      date: `Tgl ${date}`,
+      sales: sales || 0,
+    }));
+
+    const calculatedTotal = formattedChartData.reduce((sum, item) => sum + item.sales, 0);
+
+    const busiestDay = formattedChartData.reduce((max, entry) => {
+      return entry.sales > max.sales ? { day: entry.date, sales: entry.sales } : max;
+    }, { day: '-', sales: 0 });
+
+    setChartData(formattedChartData);
+    setSummary({
+      totalSales: calculatedTotal,
+      totalCashSales,
+      totalQrisSales,
+      busiestDay,
+    });
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    setLoading(true);
+    const fetchSupabaseMonthly = async () => {
+      try {
         const today = new Date();
-        const monthStart = startOfMonth(today);
-        const monthEnd = endOfMonth(today);
+        const monthStart = startOfMonth(today).toISOString();
+        const monthEnd = endOfMonth(today).toISOString();
 
-        const q = query(collection(db, 'orders'), where('timestamp', '>=', monthStart), where('timestamp', '<=', monthEnd));
-        
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
-            const dailySales: Record<string, number> = {};
-            daysInMonth.forEach(day => {
-                dailySales[format(day, 'dd')] = 0;
-            });
+        const { data, error } = await supabase
+          .from('orders')
+          .select('*')
+          .gte('created_at', monthStart)
+          .lte('created_at', monthEnd);
 
-            let totalSales = 0;
-            let totalCashSales = 0;
-            let totalQrisSales = 0;
-
-            snapshot.forEach(doc => {
-                const data = doc.data();
-                const orderDate = (data.timestamp as Timestamp).toDate();
-                const dayOfMonth = format(orderDate, 'dd');
-                if (dailySales[dayOfMonth] !== undefined) {
-                    dailySales[dayOfMonth] += data.total;
-                }
-                totalSales += data.total;
-                if (data.paymentMethod === 'cash') {
-                    totalCashSales += data.total;
-                } else if (data.paymentMethod === 'qris') {
-                    totalQrisSales += data.total;
-                }
-            });
-
-            const newChartData = Object.entries(dailySales).map(([date, sales]) => ({ date, sales }));
-            setChartData(newChartData);
-
-            const busiest = Object.entries(dailySales).reduce((busiest, [date, sales]) => {
-                if (sales > busiest.sales) {
-                    const fullDate = new Date(today.getFullYear(), today.getMonth(), parseInt(date));
-                    return { day: format(fullDate, 'eeee'), sales };
-                }
-                return busiest;
-            }, { day: 'N/A', sales: 0 });
-
-            setSummary({ totalSales, totalCashSales, totalQrisSales, busiestDay: busiest });
-            setLoading(false);
-        }, (error) => {
-            console.error("Error fetching end of month report: ", error);
-            setLoading(false);
-        });
-
-        return () => unsubscribe();
-    }, []);
-
-    const handleExport = () => {
-        if (!summary || chartData.length === 0) {
-            toast({ title: 'No Data', description: 'There is no summary data to export.', variant: 'default' });
-            return;
+        if (!error && data) {
+          calculateMonthlyData(data);
+        } else {
+          const saved = localStorage.getItem('pos_orders');
+          const localOrders = saved ? JSON.parse(saved) : [];
+          calculateMonthlyData(localOrders);
         }
-        toast({ title: 'Exporting...', description: 'Your Excel file is being generated.' });
-        
-        const wb = xlsx.utils.book_new();
-        const headerColor = "E2EFDA"; // Light Green
-        
-        // --- Sheet 1: Summary ---
-        const summaryData = [
-            ["End of Month Report", format(new Date(), 'MMMM yyyy')],
-            [],
-            ["Metric", "Value"],
-            ["Total Sales", summary.totalSales],
-            ["Total Cash Sales", summary.totalCashSales],
-            ["Total QRIS Sales", summary.totalQrisSales],
-            ["Busiest Day", summary.busiestDay.day],
-            ["Busiest Day Sales", summary.busiestDay.sales]
-        ];
-        const wsSummary = xlsx.utils.aoa_to_sheet(summaryData);
-        wsSummary['!cols'] = [{ wch: 25 }, { wch: 25 }];
-        wsSummary['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
-        
-        const styleSheet = (ws: xlsx.WorkSheet, color: string) => {
-             const range = xlsx.utils.decode_range(ws['!ref']!);
-             for (let R = range.s.r; R <= range.e.r; ++R) {
-                for (let C = range.s.c; C <= range.e.c; ++C) {
-                    const cellAddress = { c: C, r: R };
-                    const cellRef = xlsx.utils.encode_cell(cellAddress);
-                    if (!ws[cellRef]) continue;
-
-                    ws[cellRef].s = {
-                        alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-                        border: {
-                            top: { style: 'thin', color: { rgb: "DDDDDD" } },
-                            bottom: { style: 'thin', color: { rgb: "DDDDDD" } },
-                            left: { style: 'thin', color: { rgb: "DDDDDD" } },
-                            right: { style: 'thin', color: { rgb: "DDDDDD" } },
-                        }
-                    };
-                    
-                    const isHeaderRow = (R === 0 && ws['!merges']?.find(m => m.s.r === R)) ||
-                                        (ws[cellRef].v && ['Metric', 'Value', 'Date', 'Sales'].includes(ws[cellRef].v));
-
-                    if (isHeaderRow) {
-                         ws[cellRef].s = { 
-                            ...ws[cellRef].s,
-                            font: { bold: true, sz: R === 0 ? 16 : 12 },
-                            fill: { fgColor: { rgb: color } }
-                        };
-                    }
-                }
-             }
-        };
-
-        styleSheet(wsSummary, headerColor);
-
-        for (let R = 3; R <= 7; R++) {
-            const labelCell = xlsx.utils.encode_cell({c: 0, r: R});
-            if(wsSummary[labelCell]) wsSummary[labelCell].s.alignment.horizontal = 'left';
-            
-            const valueCell = xlsx.utils.encode_cell({c: 1, r: R});
-            if (wsSummary[valueCell] && [3,4,5,7].includes(R)) {
-                wsSummary[valueCell].t = 'n';
-                wsSummary[valueCell].z = '"Rp"#,##0';
-                wsSummary[valueCell].s.alignment.horizontal = 'right';
-            }
-        }
-        xlsx.utils.book_append_sheet(wb, wsSummary, "Monthly Summary");
-
-        // --- Sheet 2: Daily Sales Data ---
-        const dailyData = chartData.map(d => ({ "Date": d.date, "Sales": d.sales }));
-        const wsDaily = xlsx.utils.json_to_sheet(dailyData);
-        wsDaily['!cols'] = [{ wch: 15 }, { wch: 25 }];
-        styleSheet(wsDaily, headerColor);
-        
-        const rangeDaily = xlsx.utils.decode_range(wsDaily['!ref']!);
-        for (let R = rangeDaily.s.r + 1; R <= rangeDaily.e.r; ++R) {
-            const cell_address = {c: 1, r: R};
-            const cell_ref = xlsx.utils.encode_cell(cell_address);
-            if (wsDaily[cell_ref]) {
-                wsDaily[cell_ref].t = 'n';
-                wsDaily[cell_ref].z = '"Rp"#,##0';
-                wsDaily[cell_ref].s.alignment.horizontal = 'right';
-            }
-        }
-        xlsx.utils.book_append_sheet(wb, wsDaily, "Daily Sales Data");
-
-        xlsx.writeFile(wb, `BrewFlow_EOM_Report_${format(new Date(), 'yyyy-MM')}.xlsx`);
+      } catch (e) {
+        const saved = localStorage.getItem('pos_orders');
+        const localOrders = saved ? JSON.parse(saved) : [];
+        calculateMonthlyData(localOrders);
+      } finally {
+        setLoading(false);
+      }
     };
 
-    if (loading) {
-        return (
-            <div className="space-y-6">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div>
-                        <Skeleton className="h-8 w-64" />
-                        <Skeleton className="h-4 w-72 mt-2" />
-                    </div>
-                    <Skeleton className="h-10 w-32" />
-                </div>
-                <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-                    {Array.from({length: 4}).map((_, i) => (
-                         <Card key={i}>
-                            <CardHeader><Skeleton className="h-5 w-24" /></CardHeader>
-                            <CardContent><Skeleton className="h-8 w-32" /></CardContent>
-                        </Card>
-                    ))}
-                </div>
-                <Card>
-                    <CardHeader>
-                        <Skeleton className="h-6 w-32" />
-                        <Skeleton className="h-4 w-48 mt-1" />
-                    </CardHeader>
-                    <CardContent>
-                       <Skeleton className="h-[350px] w-full" />
-                    </CardContent>
-                </Card>
-            </div>
-        )
-    }
+    fetchSupabaseMonthly();
+  }, []);
 
-    return (
-        <div className="space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold">End of Month Report</h1>
-                    <p className="text-muted-foreground">Aggregated daily data for a monthly overview.</p>
-                </div>
-                <Button onClick={handleExport}>
-                    <Download className="mr-2 h-4 w-4" />
-                    Export to Excel
-                </Button>
-            </div>
-            
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-                 <Card>
-                    <CardHeader><CardTitle>Total Sales</CardTitle></CardHeader>
-                    <CardContent><p className="text-2xl font-bold">{summary ? formatCurrency(summary.totalSales) : '...'}</p></CardContent>
-                </Card>
-                <Card>
-                    <CardHeader><CardTitle>Cash Sales</CardTitle></CardHeader>
-                    <CardContent><p className="text-2xl font-bold">{summary ? formatCurrency(summary.totalCashSales) : '...'}</p></CardContent>
-                </Card>
-                <Card>
-                    <CardHeader><CardTitle>QRIS Sales</CardTitle></CardHeader>
-                    <CardContent><p className="text-2xl font-bold">{summary ? formatCurrency(summary.totalQrisSales) : '...'}</p></CardContent>
-                </Card>
-                 <Card>
-                    <CardHeader><CardTitle>Busiest Day</CardTitle></CardHeader>
-                    <CardContent>
-                        <p className="text-xl font-bold">{summary?.busiestDay.day}</p>
-                        <p className="text-sm text-muted-foreground">{summary ? formatCurrency(summary.busiestDay.sales) : '...'} in sales</p>
-                    </CardContent>
-                </Card>
-            </div>
+  const handleExport = () => {
+    if (!summary || chartData.length === 0) return;
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>Daily Sales Trend</CardTitle>
-                    <CardDescription>Sales performance throughout the month.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <ChartContainer config={chartConfig} className="h-[350px] w-full">
-                        <BarChart accessibilityLayer data={chartData}>
-                            <XAxis dataKey="date" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => val.toString().padStart(2, '0')} />
-                            <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={formatChartCurrency} />
-                            <Tooltip cursor={false} content={<ChartTooltipContent formatter={(value) => formatCurrency(value as number)}/>} />
-                            <Bar dataKey="sales" fill="var(--color-sales)" radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                    </ChartContainer>
-                </CardContent>
-            </Card>
+    toast({ title: 'Mengekspor...', description: 'Laporan bulanan sedang disiapkan.' });
+
+    const dataToExport = chartData.map(item => ({
+      'Tanggal': item.date,
+      'Omzet Penjualan (Rp)': item.sales,
+    }));
+
+    const ws = xlsx.utils.json_to_sheet(dataToExport);
+    const wb = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(wb, ws, "Rekap Bulanan");
+    const exportFileName = `Rekap_Bulanan_${format(new Date(), 'yyyy-MM')}.xlsx`;
+    xlsx.writeFile(wb, exportFileName);
+    toast({ title: 'Selesai', description: `File ${exportFileName} berhasil diunduh.` });
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Header Info */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div>
+          <h1 className="text-xl font-bold text-foreground">Rekapitulasi Penjualan Bulanan</h1>
+          <p className="text-xs text-muted-foreground">
+            Performa total omzet, perbandingan metode bayar, dan tren harian bulan {format(new Date(), 'MMMM yyyy', { locale: idLocale })}.
+          </p>
         </div>
-    );
+        <Button onClick={handleExport} disabled={!summary} size="sm" className="h-8 text-xs font-bold bg-primary text-primary-foreground shadow-sm">
+          <Download className="mr-1.5 h-3.5 w-3.5" />
+          Ekspor Excel
+        </Button>
+      </div>
+
+      {loading || !summary ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i} className="border border-border p-4">
+              <Skeleton className="h-4 w-24 mb-2" />
+              <Skeleton className="h-7 w-36" />
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Omzet Bulan Ini</CardTitle>
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold tracking-tight text-foreground">{formatCurrency(summary.totalSales)}</div>
+              <p className="text-xs text-muted-foreground mt-1">Akumulasi penjualan kotor</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Penerimaan Tunai</CardTitle>
+              <Banknote className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold tracking-tight text-foreground">{formatCurrency(summary.totalCashSales)}</div>
+              <p className="text-xs text-muted-foreground mt-1">Kas tunai langsung</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Penerimaan QRIS</CardTitle>
+              <QrCode className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold tracking-tight text-foreground">{formatCurrency(summary.totalQrisSales)}</div>
+              <p className="text-xs text-muted-foreground mt-1">Non-tunai via QRIS</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Hari Penjualan Tertinggi</CardTitle>
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold tracking-tight text-foreground truncate">{summary.busiestDay.day}</div>
+              <p className="text-xs text-muted-foreground mt-1">{formatCurrency(summary.busiestDay.sales)} tercapai</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Monthly Trend Chart */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <div>
+            <CardTitle className="text-sm font-semibold">Tren Penjualan Harian Bulan Ini</CardTitle>
+            <CardDescription className="text-xs">Grafik fluktuasi pendapatan per hari</CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0 pb-3">
+          <div className="h-[200px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 8, right: 8, left: 10, bottom: 0 }}>
+                <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-muted/40" />
+                <XAxis dataKey="date" stroke="#888888" fontSize={10} tickLine={false} axisLine={false} interval={2} />
+                <YAxis stroke="#888888" fontSize={10} tickLine={false} axisLine={false} width={48} tickFormatter={(val: number) => val >= 1000000 ? `${(val/1000000).toFixed(1)}jt` : `${Math.round(val/1000)}rb`} />
+                <Tooltip
+                  formatter={(value: number) => [formatCurrency(value), 'Penjualan']}
+                  labelFormatter={(label) => `Tanggal: ${label}`}
+                  contentStyle={{ backgroundColor: 'var(--card)', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '11px', color: 'var(--foreground)' }}
+                />
+                <Bar dataKey="sales" fill="var(--primary)" radius={[4, 4, 0, 0]} maxBarSize={24} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }

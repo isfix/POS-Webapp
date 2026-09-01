@@ -1,281 +1,352 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { type DateRange } from 'react-day-picker';
-import { subDays, startOfDay, endOfDay, format } from 'date-fns';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/hooks/use-toast';
+import { startOfDay, endOfDay, format, subDays } from 'date-fns';
+import { id as idLocale } from 'date-fns/locale';
+import * as xlsx from 'xlsx';
+
 import { DataTable, type MenuItem } from '@/components/data/data-table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useToast } from '@/hooks/use-toast';
-import { db } from '@/lib/firebase';
-import { collection, addDoc, deleteDoc, onSnapshot, query, orderBy, doc, Timestamp, updateDoc } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
-import { FileDown } from 'lucide-react';
-import * as xlsx from 'xlsx';
-import { DatePickerWithRange } from '@/components/ui/date-range-picker';
-import { Skeleton } from '@/components/ui/skeleton';
-import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { Download, Calendar as CalendarIcon, History, Database, Sparkles, AlertCircle, Loader2 } from 'lucide-react';
+import { type DateRange } from 'react-day-picker';
+import { parseSafeDate } from '@/lib/utils';
 
-type ActivityLog = {
-    id: string;
-    user: string;
-    action: string;
-    timestamp: Timestamp;
+export type ActivityLog = {
+  id: string;
+  user: string;
+  action: string;
+  timestamp: string;
 };
 
 export default function DataManagementPage() {
-    const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-    const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [logsLoading, setLogsLoading] = useState(true);
-    const { toast } = useToast();
-    const [dateRange, setDateRange] = useState<DateRange | undefined>({
-        from: subDays(new Date(), 7),
-        to: new Date(),
-    });
+  const { user } = useAuth();
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [logsLoading, setLogsLoading] = useState(true);
+  const { toast } = useToast();
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+    from: subDays(new Date(), 7),
+    to: new Date(),
+  });
 
-    useEffect(() => {
-        const menuQuery = query(collection(db, 'menuItems'), orderBy('name'));
-        const unsubscribeMenu = onSnapshot(menuQuery, (querySnapshot) => {
-            const items: MenuItem[] = [];
-            querySnapshot.forEach((doc) => {
-                items.push({ id: doc.id, ...doc.data() } as MenuItem);
-            });
-            setMenuItems(items);
-            setLoading(false);
-        }, (error) => {
-            console.error("Error fetching menu items: ", error);
-            toast({ title: 'Error', description: 'Could not fetch menu items.', variant: 'destructive'});
-            setLoading(false);
-        });
+  useEffect(() => {
+    // Fetch from Supabase
+    const fetchData = async () => {
+      setLoading(true);
+      setLogsLoading(true);
+      try {
+        const { data: menuData, error: menuErr } = await supabase
+          .from('menu_items')
+          .select('*')
+          .order('name', { ascending: true });
 
-        const logQuery = query(collection(db, 'activityLogs'), orderBy('timestamp', 'desc'));
-        const unsubscribeLogs = onSnapshot(logQuery, (querySnapshot) => {
-            const logs: ActivityLog[] = [];
-            querySnapshot.forEach((doc) => {
-                logs.push({ id: doc.id, ...doc.data() } as ActivityLog);
-            });
-            setActivityLogs(logs);
-            setLogsLoading(false);
-        }, (error) => {
-            console.error("Error fetching activity logs: ", error);
-            toast({ title: 'Error', description: 'Could not fetch activity logs.', variant: 'destructive'});
-            setLogsLoading(false);
-        });
-
-        return () => {
-            unsubscribeMenu();
-            unsubscribeLogs();
-        };
-    }, []);
-
-    const addActivityLog = async (action: string) => {
-        try {
-            await addDoc(collection(db, 'activityLogs'), {
-                user: 'Admin', // Assuming the user is always Admin for now
-                action,
-                timestamp: Timestamp.now(),
-            });
-        } catch (error) {
-            console.error("Error adding activity log: ", error);
-            toast({ title: 'Error', description: 'Failed to record activity.', variant: 'destructive' });
-        }
-    };
-
-    const handleAddItem = async (newItemData: Omit<MenuItem, 'id'>) => {
-        try {
-            const docRef = await addDoc(collection(db, 'menuItems'), newItemData);
-            addActivityLog(`Added new item '${newItemData.name}' with ID ${docRef.id}`);
-            toast({ title: 'Success', description: 'New menu item added.' });
-        } catch (error) {
-            console.error("Error adding document: ", error);
-            toast({ title: 'Error', description: 'Failed to add menu item.', variant: 'destructive' });
-        }
-    };
-
-    const handleEditItem = async (itemToUpdate: MenuItem) => {
-       try {
-            const itemDocRef = doc(db, 'menuItems', itemToUpdate.id);
-            // The itemToUpdate contains the id, which we don't want to write to the doc itself.
-            const { id, ...dataToUpdate } = itemToUpdate;
-            await updateDoc(itemDocRef, dataToUpdate);
-            addActivityLog(`Updated item '${itemToUpdate.name}'`);
-            toast({ title: 'Success', description: 'Menu item updated.' });
-       } catch (error) {
-            console.error("Error updating document: ", error);
-            toast({ title: 'Error', description: 'Failed to update menu item.', variant: 'destructive' });
-       }
-    };
-
-    const handleDeleteItem = async (itemToDelete: MenuItem) => {
-       try {
-            await deleteDoc(doc(db, 'menuItems', itemToDelete.id));
-            addActivityLog(`Deleted item '${itemToDelete.name}'`);
-            toast({ title: 'Success', description: 'Menu item deleted.' });
-       } catch (error) {
-            console.error("Error deleting document: ", error);
-            toast({ title: 'Error', description: 'Failed to delete menu item.', variant: 'destructive' });
-       }
-    };
-
-    const filteredLogs = useMemo(() => {
-        if (!dateRange?.from) return activityLogs;
-        
-        const fromDate = startOfDay(dateRange.from);
-        const toDate = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
-        
-        return activityLogs.filter(log => {
-            const logDate = log.timestamp.toDate();
-            return logDate >= fromDate && logDate <= toDate;
-        });
-    }, [activityLogs, dateRange]);
-
-
-    const handleExportLogs = () => {
-        if (filteredLogs.length === 0) {
-            toast({ title: 'No Data', description: 'There is no activity in the selected date range to export.', variant: 'default' });
-            return;
+        if (!menuErr && menuData) {
+          const items: MenuItem[] = menuData.map((d: any) => ({
+            id: d.id,
+            name: d.name,
+            category: d.category,
+            price: Number(d.price || 0),
+            costPrice: Number(d.cost_price || d.costPrice || 0),
+            imageUrl: d.image_url || d.imageUrl,
+            availability: d.availability !== false,
+            ingredients: d.ingredients || [],
+          }));
+          setMenuItems(items);
+          localStorage.setItem('pos_menu', JSON.stringify(items));
+        } else {
+          const savedMenu = localStorage.getItem('pos_menu');
+          if (savedMenu) setMenuItems(JSON.parse(savedMenu));
         }
 
-        toast({ title: 'Exporting...', description: 'Your activity log is being generated.' });
-        
-        const dataToExport = filteredLogs.map(log => ({
-            Timestamp: log.timestamp.toDate().toLocaleString(),
-            User: log.user,
-            Action: log.action,
-        }));
+        const { data: logData, error: logErr } = await supabase
+          .from('activity_logs')
+          .select('*')
+          .order('created_at', { ascending: false });
 
-        const exportFileName = `BrewFlow_ActivityLog_${format(dateRange?.from || new Date(), 'yyyy-MM-dd')}_to_${format(dateRange?.to || dateRange?.from || new Date(), 'yyyy-MM-dd')}.xlsx`;
-
-        const ws = xlsx.utils.json_to_sheet(dataToExport);
-
-        // Calculate column widths
-        const colWidths = Object.keys(dataToExport[0]).map(key => ({
-            wch: Math.max(key.length, ...dataToExport.map(row => String(row[key as keyof typeof row]).length)) + 2
-        }));
-        if (colWidths[2]) colWidths[2].wch = 60; // Make 'Action' column wider
-        ws['!cols'] = colWidths;
-
-        // Apply styles
-        const range = xlsx.utils.decode_range(ws['!ref']!);
-        for (let R = range.s.r; R <= range.e.r; ++R) {
-            for (let C = range.s.c; C <= range.e.c; ++C) {
-                const cellAddress = { c: C, r: R };
-                const cellRef = xlsx.utils.encode_cell(cellAddress);
-                if (!ws[cellRef]) continue;
-                
-                const defaultStyle = {
-                    alignment: {
-                        horizontal: 'center',
-                        vertical: 'center',
-                        wrapText: true,
-                    },
-                    border: {
-                        top: { style: 'thin', color: { rgb: "DDDDDD" } },
-                        bottom: { style: 'thin', color: { rgb: "DDDDDD" } },
-                        left: { style: 'thin', color: { rgb: "DDDDDD" } },
-                        right: { style: 'thin', color: { rgb: "DDDDDD" } },
-                    },
-                };
-                
-                if (R === 0) {
-                     ws[cellRef].s = {
-                        ...defaultStyle,
-                        font: { bold: true },
-                        fill: { fgColor: { rgb: "FFF2CC" } } // Light Yellow
-                     };
-                } else {
-                    ws[cellRef].s = defaultStyle;
-                }
-            }
+        if (!logErr && logData) {
+          setActivityLogs(logData.map((l: any) => ({
+            id: l.id,
+            user: l.user_name || l.user || 'Admin',
+            action: l.action,
+            timestamp: l.created_at || l.timestamp || new Date().toISOString(),
+          })));
+        } else {
+          const savedLogs = localStorage.getItem('pos_logs');
+          if (savedLogs) setActivityLogs(JSON.parse(savedLogs));
         }
-        
-        const wb = xlsx.utils.book_new();
-        xlsx.utils.book_append_sheet(wb, ws, "Activity Log");
-        xlsx.writeFile(wb, exportFileName);
+      } catch (e) {
+        const savedMenu = localStorage.getItem('pos_menu');
+        if (savedMenu) setMenuItems(JSON.parse(savedMenu));
+        const savedLogs = localStorage.getItem('pos_logs');
+        if (savedLogs) setActivityLogs(JSON.parse(savedLogs));
+      } finally {
+        setLoading(false);
+        setLogsLoading(false);
+      }
     };
+
+    fetchData();
+  }, []);
+
+  const saveLocalMenu = (items: MenuItem[]) => {
+    setMenuItems(items);
+    try {
+      localStorage.setItem('pos_menu', JSON.stringify(items));
+    } catch (e) {}
+  };
+
+  const addActivityLog = async (action: string) => {
+    const operatorName = user?.displayName || user?.email || 'Staf Kasir';
+    const newLog: ActivityLog = {
+      id: `log-${Date.now()}`,
+      user: operatorName,
+      action,
+      timestamp: new Date().toISOString(),
+    };
+    const updatedLogs = [newLog, ...activityLogs];
+    setActivityLogs(updatedLogs);
+    try {
+      localStorage.setItem('pos_logs', JSON.stringify(updatedLogs.slice(0, 100)));
+    } catch (e) {}
+
+    try {
+      await supabase.from('activity_logs').insert([{
+        user_name: operatorName,
+        action,
+      }]);
+    } catch (e) {}
+  };
+
+  const handleAddItem = async (newItemData: Omit<MenuItem, 'id'>) => {
+    const tempId = `menu-${Date.now()}`;
+    const newItem: MenuItem = {
+      ...newItemData,
+      id: tempId,
+    };
+    saveLocalMenu([...menuItems, newItem]);
+    addActivityLog(`Menambah produk '${newItemData.name}'`);
+    toast({ title: 'Berhasil', description: 'Produk baru berhasil ditambahkan.' });
+
+    try {
+      const { data, error } = await supabase.from('menu_items').insert([{
+        name: newItemData.name,
+        category: newItemData.category,
+        price: newItemData.price,
+        cost_price: newItemData.costPrice,
+        image_url: newItemData.imageUrl,
+        availability: newItemData.availability,
+        ingredients: newItemData.ingredients,
+      }]).select().single();
+
+      if (data && !error) {
+        setMenuItems(prev => prev.map(m => m.id === tempId ? { ...m, id: data.id } : m));
+      }
+    } catch (error) {
+      console.warn("Saved to local store fallback");
+    }
+  };
+
+  const handleEditItem = async (itemToUpdate: MenuItem) => {
+    const updated = menuItems.map(item => item.id === itemToUpdate.id ? itemToUpdate : item);
+    saveLocalMenu(updated);
+    addActivityLog(`Memperbarui produk '${itemToUpdate.name}'`);
+    toast({ title: 'Berhasil', description: 'Data produk berhasil diperbarui.' });
+
+    try {
+      await supabase.from('menu_items').update({
+        name: itemToUpdate.name,
+        category: itemToUpdate.category,
+        price: itemToUpdate.price,
+        cost_price: itemToUpdate.costPrice,
+        image_url: itemToUpdate.imageUrl,
+        availability: itemToUpdate.availability,
+        ingredients: itemToUpdate.ingredients,
+      }).eq('id', itemToUpdate.id);
+    } catch (error) {
+      console.warn("Saved to local store fallback");
+    }
+  };
+
+  const handleDeleteItem = async (itemToDelete: MenuItem) => {
+    const filtered = menuItems.filter(item => item.id !== itemToDelete.id);
+    saveLocalMenu(filtered);
+    addActivityLog(`Menghapus produk '${itemToDelete.name}'`);
+    toast({ title: 'Berhasil', description: 'Produk berhasil dihapus.' });
+
+    try {
+      await supabase.from('menu_items').delete().eq('id', itemToDelete.id);
+    } catch (error) {
+      console.warn("Saved to local store fallback");
+    }
+  };
+
+  const filteredLogs = useMemo(() => {
+    if (!dateRange?.from) return activityLogs;
     
-    const renderLogTableBody = () => {
-        if (logsLoading) {
-            return Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}>
-                    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-full" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-40" /></TableCell>
-                </TableRow>
-            ));
-        }
+    const fromDate = startOfDay(dateRange.from);
+    const toDate = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
+    
+    return activityLogs.filter(log => {
+      try {
+        const logDate = new Date(log.timestamp);
+        return logDate >= fromDate && logDate <= toDate;
+      } catch (e) {
+        return true;
+      }
+    });
+  }, [activityLogs, dateRange]);
 
-        if (filteredLogs.length === 0) {
-            return (
-                <TableRow>
-                    <TableCell colSpan={3} className="text-center h-24">
-                        No activity found for the selected date range.
-                    </TableCell>
-                </TableRow>
-            );
-        }
+  const handleExportLogs = () => {
+    if (filteredLogs.length === 0) {
+      toast({ title: 'Data Kosong', description: 'Tidak ada aktivitas pada rentang tanggal ini.', variant: 'default' });
+      return;
+    }
 
-        return filteredLogs.map(log => (
-            <TableRow key={log.id} className="[&_td:not(:last-child)]:border-r">
-                <TableCell className="font-medium">{log.user}</TableCell>
-                <TableCell>{log.action}</TableCell>
-                <TableCell>{log.timestamp.toDate().toLocaleString()}</TableCell>
-            </TableRow>
-        ));
-    };
+    toast({ title: 'Mengekspor...', description: 'Log aktivitas sedang disiapkan.' });
+    
+    const dataToExport = filteredLogs.map(log => ({
+      'Waktu': format(parseSafeDate(log.timestamp), 'd MMMM yyyy, HH:mm:ss', { locale: idLocale }),
+      'Pengguna': log.user,
+      'Aktivitas': log.action,
+    }));
 
+    const exportFileName = `Log_Aktivitas_${format(parseSafeDate(dateRange?.from), 'yyyy-MM-dd')}.xlsx`;
 
-    return (
-        <div className="space-y-6">
-            <div>
-                <h1 className="text-2xl font-bold">Data Management</h1>
-                <p className="text-muted-foreground">Full control to edit and delete all inputs from Firestore.</p>
-            </div>
-            <DataTable 
-                menuItems={menuItems}
-                onAddItem={handleAddItem}
-                onEditItem={handleEditItem}
-                onDeleteItem={handleDeleteItem}
-            />
-            <Card>
-                <CardHeader>
-                    <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-                        <div>
-                            <CardTitle>Activity Log</CardTitle>
-                            <CardDescription>
-                                Real-time log of all create, update, and delete actions. 
-                                Showing {filteredLogs.length} of {activityLogs.length} total entries.
-                            </CardDescription>
-                        </div>
-                        <div className="flex flex-col sm:flex-row items-center gap-2">
-                            <DatePickerWithRange date={dateRange} onDateChange={setDateRange} />
-                            <Button variant="outline" onClick={handleExportLogs} className="w-full sm:w-auto">
-                                <FileDown className="mr-2 h-4 w-4" />
-                                Export
-                            </Button>
-                        </div>
-                    </div>
-                </CardHeader>
-                <CardContent>
-                    <ScrollArea className="w-full whitespace-nowrap rounded-md border">
-                        <Table>
-                            <TableHeader className="bg-accent">
-                                <TableRow className="[&_th:not(:last-child)]:border-r">
-                                    <TableHead className="w-[120px]">User</TableHead>
-                                    <TableHead>Action</TableHead>
-                                    <TableHead className="w-[200px]">Timestamp</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                            {renderLogTableBody()}
-                            </TableBody>
-                        </Table>
-                         <ScrollBar orientation="horizontal" />
-                    </ScrollArea>
-                </CardContent>
-            </Card>
-        </div>
-    )
+    const ws = xlsx.utils.json_to_sheet(dataToExport);
+    const wb = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(wb, ws, "Log Aktivitas");
+    xlsx.writeFile(wb, exportFileName);
+    toast({ title: 'Selesai', description: `File ${exportFileName} berhasil diunduh.` });
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Header Info */}
+      <div>
+        <h1 className="text-xl font-bold text-foreground">Katalog Menu & Riwayat</h1>
+        <p className="text-xs text-muted-foreground">Kelola penetapan harga jual, HPP per porsi/item, dan pantau log audit sistem.</p>
+      </div>
+
+      <Tabs defaultValue="menu" className="space-y-4">
+        <TabsList className="grid w-full max-w-md grid-cols-2 bg-secondary/80 p-1 border border-border">
+          <TabsTrigger value="menu" className="text-xs font-bold data-[state=active]:bg-background data-[state=active]:text-primary">
+            <Database className="h-3.5 w-3.5 mr-1.5" />
+            Katalog Produk & HPP
+          </TabsTrigger>
+          <TabsTrigger value="logs" className="text-xs font-bold data-[state=active]:bg-background data-[state=active]:text-primary">
+            <History className="h-3.5 w-3.5 mr-1.5" />
+            Log Aktivitas & Audit
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="menu" className="space-y-4">
+          <DataTable
+            menuItems={menuItems}
+            onAddItem={handleAddItem}
+            onEditItem={handleEditItem}
+            onDeleteItem={handleDeleteItem}
+            loading={loading}
+          />
+        </TabsContent>
+
+        <TabsContent value="logs" className="space-y-4">
+          <Card className="border border-border shadow-sm bg-card">
+            <CardHeader className="p-4 pb-2 border-b border-border/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <CardTitle className="text-sm font-bold text-foreground">Log Aktivitas Operasional</CardTitle>
+                <CardDescription className="text-xs text-muted-foreground">Rekam jejak setiap perubahan menu, harga, dan persediaan.</CardDescription>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-8 text-xs font-medium border-border">
+                      <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />
+                      {dateRange?.from ? (
+                        dateRange.to ? (
+                          <>
+                            {format(parseSafeDate(dateRange.from), "d MMM", { locale: idLocale })} - {format(parseSafeDate(dateRange.to), "d MMM yyyy", { locale: idLocale })}
+                          </>
+                        ) : (
+                          format(parseSafeDate(dateRange.from), "d MMMM yyyy", { locale: idLocale })
+                        )
+                      ) : (
+                        "Pilih Rentang Tanggal"
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="end">
+                    <Calendar
+                      initialFocus
+                      mode="range"
+                      defaultMonth={dateRange?.from}
+                      selected={dateRange}
+                      onSelect={setDateRange}
+                      numberOfMonths={2}
+                    />
+                  </PopoverContent>
+                </Popover>
+
+                <Button onClick={handleExportLogs} variant="outline" size="sm" className="h-8 text-xs font-semibold gap-1.5 border-border">
+                  <Download className="h-3.5 w-3.5" />
+                  Ekspor Excel
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="w-48 text-xs font-bold">Waktu</TableHead>
+                    <TableHead className="w-40 text-xs font-bold">Pengguna</TableHead>
+                    <TableHead className="text-xs font-bold">Aktivitas</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {logsLoading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell><div className="h-4 bg-muted animate-pulse rounded w-32" /></TableCell>
+                        <TableCell><div className="h-4 bg-muted animate-pulse rounded w-24" /></TableCell>
+                        <TableCell><div className="h-4 bg-muted animate-pulse rounded w-64" /></TableCell>
+                      </TableRow>
+                    ))
+                  ) : filteredLogs.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center text-muted-foreground py-8 text-xs">
+                        Tidak ada aktivitas yang tercatat pada periode ini.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredLogs.map((log) => (
+                      <TableRow key={log.id}>
+                        <TableCell className="text-xs text-muted-foreground font-mono">
+                          {format(parseSafeDate(log.timestamp), 'd MMM yyyy, HH:mm', { locale: idLocale })}
+                        </TableCell>
+                        <TableCell className="text-xs font-bold text-foreground">
+                          {log.user}
+                        </TableCell>
+                        <TableCell className="text-xs text-foreground">
+                          {log.action}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
 }

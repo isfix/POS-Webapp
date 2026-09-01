@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { format } from "date-fns";
+import { id as idLocale } from 'date-fns/locale';
 import * as xlsx from 'xlsx';
 import {
   Table,
@@ -12,21 +13,21 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Pencil, Trash2, MoreHorizontal, PlusCircle, Calendar as CalendarIcon, Search, FileDown, Filter } from 'lucide-react';
+import { Pencil, Trash2, MoreHorizontal, PlusCircle, Calendar as CalendarIcon, Search, FileDown, AlertTriangle } from 'lucide-react';
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -35,58 +36,88 @@ import { Badge } from '../ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { Timestamp } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '../ui/skeleton';
 import { ScrollArea, ScrollBar } from '../ui/scroll-area';
 
-
 export type InventoryItem = {
   id: string;
   name: string;
-  category: 'Ingredients' | 'Packaging' | 'Equipment' | 'Cleaning Supplies' | 'Business Supplies';
+  category: 'Tepung & Ragi' | 'Dairy, Mentega & Telur' | 'Gula & Pemanis' | 'Isian & Topping' | 'Kemasan & Dus Roti' | 'Perlengkapan & Kebersihan' | string;
   quantity: number;
   unitType: string;
   minThreshold: number;
   supplier?: string;
-  expirationDate?: Timestamp;
+  expirationDate?: any;
   costPerUnit: number;
-  lastUpdated: Timestamp;
+  lastUpdated?: any;
 };
 
-const itemCategories = ['Ingredients', 'Packaging', 'Equipment', 'Cleaning Supplies', 'Business Supplies'] as const;
+export const BAKERY_INVENTORY_CATEGORIES = [
+  'Tepung & Ragi',
+  'Dairy, Mentega & Telur',
+  'Gula & Pemanis',
+  'Isian & Topping',
+  'Kemasan & Dus Roti',
+  'Perlengkapan & Kebersihan',
+] as const;
 
 type ItemFormData = {
-    name: string;
-    category: typeof itemCategories[number];
-    quantity: string;
-    unitType: string;
-    minThreshold: string;
-    supplier: string;
-    expirationDate?: Date;
-    costPerUnit: string;
-}
-
-type DataTableProps = {
-    inventoryItems: InventoryItem[];
-    onAddItem: (newItemData: Omit<InventoryItem, 'id' | 'lastUpdated'>) => void;
-    onEditItem: (item: InventoryItem) => void;
-    onDeleteItem: (item: InventoryItem) => void;
-    loading: boolean;
-}
-
-const emptyFormState: ItemFormData = { 
-    name: '',
-    category: 'Ingredients', 
-    quantity: '', 
-    unitType: '', 
-    minThreshold: '', 
-    supplier: '', 
-    expirationDate: undefined, 
-    costPerUnit: '' 
+  name: string;
+  category: string;
+  quantity: string;
+  unitType: string;
+  minThreshold: string;
+  supplier: string;
+  expirationDate?: Date;
+  costPerUnit: string;
 };
 
-export function InventoryTable({ inventoryItems, onAddItem, onEditItem, onDeleteItem, loading }: DataTableProps) {
+type DataTableProps = {
+  inventoryItems: InventoryItem[];
+  onAddItem: (newItemData: Omit<InventoryItem, 'id'>) => void;
+  onEditItem: (item: InventoryItem) => void;
+  onDeleteItem: (item: InventoryItem) => void;
+  loading: boolean;
+};
+
+const emptyFormState: ItemFormData = {
+  name: '',
+  category: 'Tepung & Ragi',
+  quantity: '',
+  unitType: 'kg',
+  minThreshold: '',
+  supplier: '',
+  expirationDate: undefined,
+  costPerUnit: '',
+};
+
+const formatCurrency = (value: number) => {
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0,
+  }).format(value);
+};
+
+const formatDateSafe = (date: any) => {
+  if (!date) return '-';
+  try {
+    const d = date.toDate ? date.toDate() : new Date(date);
+    if (isNaN(d.getTime())) return '-';
+    return format(d, 'd MMM yyyy', { locale: idLocale });
+  } catch (e) {
+    return '-';
+  }
+};
+
+export function InventoryTable({
+  inventoryItems,
+  onAddItem,
+  onEditItem,
+  onDeleteItem,
+  loading,
+}: DataTableProps) {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [formData, setFormData] = useState<ItemFormData>(emptyFormState);
@@ -94,294 +125,430 @@ export function InventoryTable({ inventoryItems, onAddItem, onEditItem, onDelete
   const [categoryFilter, setCategoryFilter] = useState('all');
   const { toast } = useToast();
 
-  const filteredItems = useMemo(() => {
-    return inventoryItems.filter(item => {
-        const categoryMatch = categoryFilter === 'all' || item.category === categoryFilter;
-        const searchMatch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
-        return categoryMatch && searchMatch;
-    });
-  }, [inventoryItems, searchQuery, categoryFilter]);
-
   const handleOpenForm = (item: InventoryItem | null = null) => {
     if (item) {
-        setEditingItem(item);
-        setFormData({
-            name: item.name,
-            category: item.category,
-            quantity: item.quantity.toString(),
-            unitType: item.unitType,
-            minThreshold: item.minThreshold.toString(),
-            supplier: item.supplier || '',
-            expirationDate: item.expirationDate ? item.expirationDate.toDate() : undefined,
-            costPerUnit: item.costPerUnit.toString()
-        });
+      setEditingItem(item);
+      const expDate = item.expirationDate ? (item.expirationDate.toDate ? item.expirationDate.toDate() : new Date(item.expirationDate)) : undefined;
+      setFormData({
+        name: item.name,
+        category: item.category,
+        quantity: item.quantity.toString(),
+        unitType: item.unitType,
+        minThreshold: item.minThreshold.toString(),
+        supplier: item.supplier || '',
+        expirationDate: expDate,
+        costPerUnit: item.costPerUnit.toString(),
+      });
     } else {
-        setEditingItem(null);
-        setFormData(emptyFormState);
+      setEditingItem(null);
+      setFormData(emptyFormState);
     }
     setIsFormOpen(true);
-  }
+  };
+
+  const handleCloseForm = () => {
+    setIsFormOpen(false);
+    setEditingItem(null);
+    setFormData(emptyFormState);
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  }
+    const { id, value } = e.target;
+    setFormData((prev) => ({ ...prev, [id]: value }));
+  };
 
-  const handleSubmit = () => {
-    // Basic validation
-    if (!formData.name || !formData.category || !formData.quantity || !formData.unitType || !formData.minThreshold || !formData.costPerUnit) {
-        toast({ title: 'Error', description: 'Please fill all required fields.', variant: 'destructive' });
-        return;
+  const handleSelectChange = (id: 'category' | 'unitType', value: string) => {
+    setFormData((prev) => ({ ...prev, [id]: value }));
+  };
+
+  const handleDateSelect = (date: Date | undefined) => {
+    setFormData((prev) => ({ ...prev, expirationDate: date }));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!formData.name || !formData.quantity || !formData.costPerUnit) {
+      toast({
+        title: 'Form Belum Lengkap',
+        description: 'Nama bahan, jumlah stok, dan harga satuan wajib diisi.',
+        variant: 'destructive',
+      });
+      return;
     }
 
-    const submissionData = {
-        name: formData.name,
-        category: formData.category,
-        quantity: parseFloat(formData.quantity),
-        unitType: formData.unitType,
-        minThreshold: parseFloat(formData.minThreshold),
-        supplier: formData.supplier,
-        expirationDate: formData.expirationDate ? Timestamp.fromDate(formData.expirationDate) : undefined,
-        costPerUnit: parseFloat(formData.costPerUnit),
+    const numericQuantity = parseFloat(formData.quantity);
+    const numericMinThreshold = parseFloat(formData.minThreshold) || 0;
+    const numericCost = parseFloat(formData.costPerUnit);
+
+    if (isNaN(numericQuantity) || isNaN(numericCost)) {
+      toast({
+        title: 'Input Tidak Valid',
+        description: 'Jumlah stok dan harga harus berupa angka valid.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const itemData = {
+      name: formData.name,
+      category: formData.category,
+      quantity: numericQuantity,
+      unitType: formData.unitType,
+      minThreshold: numericMinThreshold,
+      supplier: formData.supplier || '',
+      expirationDate: formData.expirationDate ? formData.expirationDate.toISOString() : null,
+      costPerUnit: numericCost,
+      lastUpdated: new Date().toISOString(),
     };
 
     if (editingItem) {
-        onEditItem({ ...submissionData, id: editingItem.id, lastUpdated: Timestamp.now() });
+      onEditItem({ id: editingItem.id, ...itemData } as InventoryItem);
     } else {
-        onAddItem(submissionData as Omit<InventoryItem, 'id' | 'lastUpdated'>);
+      onAddItem(itemData as any);
     }
 
-    setIsFormOpen(false);
-  }
+    handleCloseForm();
+  };
+
+  const filteredItems = useMemo(() => {
+    return (Array.isArray(inventoryItems) ? inventoryItems : []).filter((item) => {
+      if (!item) return false;
+      const name = String(item.name || (item as any).title || '').toLowerCase();
+      const supplier = String(item.supplier || item.category || '').toLowerCase();
+      const query = String(searchQuery || '').toLowerCase();
+      const matchesSearch = name.includes(query) || supplier.includes(query);
+      const matchesCategory = categoryFilter === 'all' || item.category === categoryFilter;
+      return matchesSearch && matchesCategory;
+    });
+  }, [inventoryItems, searchQuery, categoryFilter]);
 
   const handleExport = () => {
     if (filteredItems.length === 0) {
-        toast({ title: 'No Data', description: 'There is no inventory to export.', variant: 'default' });
-        return;
+      toast({ title: 'Data Kosong', description: 'Tidak ada data stok untuk diekspor.', variant: 'default' });
+      return;
     }
-    toast({ title: 'Exporting...', description: 'Your Excel file is being generated.' });
 
-    const dataToExport = filteredItems.map(item => ({
-        'Name': item.name,
-        'Category': item.category,
-        'Quantity': item.quantity,
-        'Unit': item.unitType,
-        'Threshold': item.minThreshold,
-        'Cost per Unit (Rp)': item.costPerUnit,
-        'Supplier': item.supplier || 'N/A',
-        'Expires On': item.expirationDate ? format(item.expirationDate.toDate(), 'PPP') : 'N/A',
-        'Last Updated': format(item.lastUpdated.toDate(), 'PPP p'),
+    toast({ title: 'Mengekspor...', description: 'File Excel sedang dipersiapkan.' });
+
+    const dataToExport = filteredItems.map((item) => ({
+      'Nama Bahan': item.name || 'Bahan Baku',
+      'Kategori': item.category || 'Lain-lain',
+      'Jumlah Stok': Number(item.quantity || 0),
+      'Satuan': item.unitType || 'kg',
+      'Batas Minimum': Number(item.minThreshold || 0),
+      'Harga Beli Satuan (Rp)': Number(item.costPerUnit || 0),
+      'Total Nilai Stok (Rp)': Number(item.quantity || 0) * Number(item.costPerUnit || 0),
+      'Pemasok / Supplier': item.supplier || '-',
+      'Tgl Kedaluwarsa': formatDateSafe(item.expirationDate),
+      'Status': Number(item.quantity || 0) <= Number(item.minThreshold || 0) ? 'MENIPIS' : 'AMAN',
     }));
 
+    const exportFileName = `Stok_Bahan_Baku_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
     const ws = xlsx.utils.json_to_sheet(dataToExport);
     const wb = xlsx.utils.book_new();
-    xlsx.utils.book_append_sheet(wb, ws, 'Inventory');
-    xlsx.writeFile(wb, 'BrewFlow_Inventory.xlsx');
+    xlsx.utils.book_append_sheet(wb, ws, 'Bahan Baku');
+    xlsx.writeFile(wb, exportFileName);
+    toast({ title: 'Selesai', description: `File ${exportFileName} berhasil diunduh.` });
   };
-  
+
   const renderTableBody = () => {
     if (loading) {
-        return Array.from({ length: 5 }).map((_, index) => (
-            <TableRow key={index} className="[&_td:not(:last-child)]:border-r">
-                <TableCell><Skeleton className="h-5 w-32" /></TableCell>
-                <TableCell><Skeleton className="h-6 w-24 rounded-full" /></TableCell>
-                <TableCell className="text-right"><Skeleton className="h-5 w-16 ml-auto" /></TableCell>
-                <TableCell><Skeleton className="h-5 w-20" /></TableCell>
-                <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-                <TableCell className="text-right"><Skeleton className="h-8 w-8 ml-auto" /></TableCell>
-            </TableRow>
-        ));
+      return Array.from({ length: 5 }).map((_, i) => (
+        <TableRow key={i}>
+          <TableCell><Skeleton className="h-4 w-36" /></TableCell>
+          <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+          <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
+          <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+          <TableCell><Skeleton className="h-4 w-24 ml-auto" /></TableCell>
+          <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+          <TableCell><Skeleton className="h-4 w-8 ml-auto" /></TableCell>
+        </TableRow>
+      ));
     }
     
     if (filteredItems.length === 0) {
-        return (
-            <TableRow>
-                <TableCell colSpan={6} className="text-center h-24">
-                    {searchQuery ? `No items found for "${searchQuery}"` : "No inventory items found."}
-                </TableCell>
-            </TableRow>
-        );
+      return (
+        <TableRow>
+          <TableCell colSpan={7} className="text-center h-24 text-xs text-muted-foreground">
+            {searchQuery ? `Tidak ada bahan baku dengan kata kunci "${searchQuery}"` : "Belum ada bahan baku yang terdaftar."}
+          </TableCell>
+        </TableRow>
+      );
     }
 
     return filteredItems.map((item) => {
-        const isLowStock = item.quantity <= item.minThreshold;
-        return (
-            <TableRow key={item.id} className={cn("[&_td:not(:last-child)]:border-r", isLowStock && 'bg-destructive/10')}>
-                <TableCell className="font-medium whitespace-nowrap">{item.name}</TableCell>
-                <TableCell><Badge variant="outline">{item.category}</Badge></TableCell>
-                <TableCell className="text-right whitespace-nowrap">
-                    <span className={cn(isLowStock && 'text-destructive font-bold')}>
-                        {item.quantity}
-                    </span>
-                    <span className="text-muted-foreground"> / {item.minThreshold}</span>
-                </TableCell>
-                <TableCell className="whitespace-nowrap">{item.unitType}</TableCell>
-                <TableCell className="whitespace-nowrap">{item.expirationDate ? format(item.expirationDate.toDate(), 'PPP') : 'N/A'}</TableCell>
-                <TableCell className="text-right">
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
-                                <span className="sr-only">Open menu</span>
-                                <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleOpenForm(item)}>
-                                <Pencil className="mr-2 h-4 w-4" /> Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => onDeleteItem(item)} className="text-destructive focus:text-destructive focus:bg-destructive/10">
-                                <Trash2 className="mr-2 h-4 w-4" /> Delete
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                </TableCell>
-            </TableRow>
-        );
+      const qty = Number(item.quantity || 0);
+      const minThresh = Number(item.minThreshold || 0);
+      const isLowStock = qty <= minThresh;
+      return (
+        <TableRow key={item.id} className={cn("text-xs hover:bg-muted/40 transition-colors [&_td]:py-2.5", isLowStock && 'bg-destructive/5')}>
+          <TableCell className="font-semibold text-foreground whitespace-nowrap">
+            <div className="flex items-center gap-1.5">
+              {isLowStock && <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />}
+              <span>{item.name || 'Bahan Baku'}</span>
+            </div>
+          </TableCell>
+          <TableCell>
+            <Badge variant="secondary" className="text-[10px] font-semibold bg-secondary text-foreground">
+              {item.category || 'Bahan Baku'}
+            </Badge>
+          </TableCell>
+          <TableCell className="text-right whitespace-nowrap font-bold">
+            <span className={cn(isLowStock ? 'text-destructive font-black' : 'text-foreground')}>
+              {qty}
+            </span>
+            <span className="text-muted-foreground text-[11px]"> / min {minThresh}</span>
+          </TableCell>
+          <TableCell className="whitespace-nowrap font-medium text-muted-foreground">{item.unitType || 'kg'}</TableCell>
+          <TableCell className="text-right whitespace-nowrap font-bold text-foreground">
+            {formatCurrency(Number(item.costPerUnit || 0))}
+          </TableCell>
+          <TableCell className="whitespace-nowrap text-muted-foreground">
+            {formatDateSafe(item.expirationDate)}
+          </TableCell>
+          <TableCell className="text-right">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground">
+                  <span className="sr-only">Buka menu</span>
+                  <MoreHorizontal className="h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-36 text-xs font-semibold">
+                <DropdownMenuItem onClick={() => handleOpenForm(item)}>
+                  <Pencil className="mr-2 h-3.5 w-3.5" /> Edit Bahan
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onDeleteItem(item)} className="text-destructive focus:text-destructive focus:bg-destructive/10">
+                  <Trash2 className="mr-2 h-3.5 w-3.5" /> Hapus Bahan
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </TableCell>
+        </TableRow>
+      );
     });
-  }
+  };
 
   return (
     <>
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <Card>
-            <CardHeader className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div>
-                    <CardTitle>Inventory Items</CardTitle>
-                    <CardDescription>View, edit, or delete inventory items.</CardDescription>
-                </div>
-                 <div className="flex flex-col sm:flex-row items-center gap-2">
-                    <Button onClick={() => handleOpenForm()} className="w-full sm:w-auto">
-                        <PlusCircle className="mr-2 h-4 w-4" /> Add Item
-                    </Button>
-                    <Button variant="outline" onClick={handleExport} className="w-full sm:w-auto">
-                        <FileDown className="mr-2 h-4 w-4" /> Export
-                    </Button>
-                </div>
-            </CardHeader>
-            <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 p-4 bg-muted/50 rounded-lg">
-                   <div className="space-y-2">
-                        <Label htmlFor="search">Search by Name</Label>
-                         <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                            <Input
-                                id="search"
-                                placeholder="Search inventory..."
-                                className="pl-10"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                            />
-                        </div>
-                    </div>
-                    <div className="space-y-2">
-                        <Label>Filter by Category</Label>
-                        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Categories</SelectItem>
-                                {itemCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                </div>
-                <ScrollArea className="w-full whitespace-nowrap rounded-md border">
-                    <Table>
-                        <TableHeader className="bg-accent">
-                            <TableRow className="[&_th:not(:last-child)]:border-r">
-                                <TableHead>Name</TableHead>
-                                <TableHead>Category</TableHead>
-                                <TableHead className="text-right">Quantity / Threshold</TableHead>
-                                <TableHead>Unit</TableHead>
-                                <TableHead>Expires</TableHead>
-                                <TableHead className="text-right">Actions</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {renderTableBody()}
-                        </TableBody>
-                    </Table>
-                    <ScrollBar orientation="horizontal" />
-                </ScrollArea>
-            </CardContent>
+        <Card className="border border-border shadow-sm bg-card">
+          <CardHeader className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 p-4 pb-2 border-b border-border/60">
+            <div>
+              <CardTitle className="text-sm font-bold text-foreground">Daftar Bahan Baku & Persediaan</CardTitle>
+              <CardDescription className="text-xs text-muted-foreground">Kelola stok resep, harga beli modal, dan tanggal kedaluwarsa</CardDescription>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button onClick={() => handleOpenForm()} size="sm" className="h-8 text-xs font-bold bg-primary text-primary-foreground shadow-sm">
+                <PlusCircle className="mr-1.5 h-3.5 w-3.5" /> Tambah Bahan
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleExport} className="h-8 text-xs font-semibold border-border">
+                <FileDown className="mr-1.5 h-3.5 w-3.5" /> Ekspor Excel
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="p-4 space-y-3">
+            {/* Search & Filter Bar */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 p-2.5 bg-secondary/50 rounded-lg border border-border">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  id="search"
+                  placeholder="Cari nama bahan atau supplier..."
+                  className="pl-8 h-8 text-xs bg-card"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger className="h-8 text-xs bg-card">
+                  <SelectValue placeholder="Pilih Kategori" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all" className="text-xs font-semibold">Semua Kategori Bahan</SelectItem>
+                  {BAKERY_INVENTORY_CATEGORIES.map((cat) => (
+                    <SelectItem key={cat} value={cat} className="text-xs">{cat}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Table */}
+            <div className="border border-border rounded-lg overflow-hidden bg-card">
+              <ScrollArea className="w-full">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/40 hover:bg-muted/40">
+                      <TableHead className="text-xs font-bold text-foreground h-9">Nama Bahan Baku</TableHead>
+                      <TableHead className="text-xs font-bold text-foreground h-9">Kategori</TableHead>
+                      <TableHead className="text-xs font-bold text-foreground h-9 text-right">Stok Saat Ini</TableHead>
+                      <TableHead className="text-xs font-bold text-foreground h-9">Satuan</TableHead>
+                      <TableHead className="text-xs font-bold text-foreground h-9 text-right">Harga Modal</TableHead>
+                      <TableHead className="text-xs font-bold text-foreground h-9">Kedaluwarsa</TableHead>
+                      <TableHead className="text-xs font-bold text-foreground h-9 text-right w-12"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>{renderTableBody()}</TableBody>
+                </Table>
+                <ScrollBar orientation="horizontal" />
+              </ScrollArea>
+            </div>
+          </CardContent>
         </Card>
 
-        <DialogContent className="sm:max-w-lg">
-            <DialogHeader>
-                <DialogTitle>{editingItem ? 'Edit Inventory Item' : 'Add New Inventory Item'}</DialogTitle>
-                <DialogDescription>
-                    Enter the details for the stock item. Click save when you're done.
-                </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4 max-h-[70vh] overflow-y-auto pr-4">
-                <div className="space-y-2">
-                    <Label htmlFor="name">Item Name</Label>
-                    <Input id="name" name="name" value={formData.name} onChange={handleInputChange} />
-                </div>
-                 <div className="space-y-2">
-                    <Label htmlFor="category">Category</Label>
-                    <Select value={formData.category} onValueChange={(value) => setFormData(p => ({...p, category: value as any}))}>
-                        <SelectTrigger>
-                            <SelectValue placeholder="Select a category" />
-                        </SelectTrigger>
-                        <SelectContent>
-                           {itemCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="quantity">Quantity</Label>
-                        <Input id="quantity" name="quantity" type="number" value={formData.quantity} onChange={handleInputChange} />
-                    </div>
-                     <div className="space-y-2">
-                        <Label htmlFor="unitType">Unit Type</Label>
-                        <Input id="unitType" name="unitType" value={formData.unitType} onChange={handleInputChange} placeholder="e.g. kg, pack"/>
-                    </div>
-                </div>
-                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                     <div className="space-y-2">
-                        <Label htmlFor="minThreshold">Low Stock Threshold</Label>
-                        <Input id="minThreshold" name="minThreshold" type="number" value={formData.minThreshold} onChange={handleInputChange} />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="costPerUnit">Cost per Unit (Rp)</Label>
-                        <Input id="costPerUnit" name="costPerUnit" type="number" value={formData.costPerUnit} onChange={handleInputChange} />
-                    </div>
-                </div>
-                 <div className="space-y-2">
-                    <Label htmlFor="supplier">Supplier</Label>
-                    <Input id="supplier" name="supplier" value={formData.supplier} onChange={handleInputChange} placeholder="(Optional)" />
-                </div>
-                <div className="space-y-2">
-                    <Label htmlFor="expirationDate">Expiration Date</Label>
-                     <Popover>
-                        <PopoverTrigger asChild>
-                        <Button
-                            variant={"outline"}
-                            className={cn(
-                            "w-full justify-start text-left font-normal",
-                            !formData.expirationDate && "text-muted-foreground"
-                            )}
-                        >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {formData.expirationDate ? format(formData.expirationDate, "PPP") : <span>Pick a date (Optional)</span>}
-                        </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                            <Calendar
-                                mode="single"
-                                selected={formData.expirationDate}
-                                onSelect={(date) => setFormData(p => ({...p, expirationDate: date || undefined}))}
-                                initialFocus
-                            />
-                        </PopoverContent>
-                    </Popover>
-                </div>
+        {/* Modal Form Tambah / Edit */}
+        <DialogContent className="max-w-md p-5">
+          <DialogHeader className="pb-2 border-b border-border">
+            <DialogTitle className="text-base font-bold text-foreground">
+              {editingItem ? 'Ubah Data Bahan Baku' : 'Tambah Bahan Baku Baru'}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              {editingItem ? 'Perbarui informasi kuantitas atau harga modal bahan.' : 'Masukkan rincian bahan baku bakery ke sistem.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmit} className="space-y-3 pt-2">
+            <div className="space-y-1">
+              <Label htmlFor="name" className="text-xs font-semibold">Nama Bahan Baku</Label>
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={handleInputChange}
+                placeholder="Contoh: Tepung Terigu Cakra Kembar"
+                className="h-8 text-xs"
+              />
             </div>
-            <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)}>Cancel</Button>
-                <Button type="submit" onClick={handleSubmit}>Save Changes</Button>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold">Kategori Bahan</Label>
+                <Select
+                  value={formData.category}
+                  onValueChange={(val) => handleSelectChange('category', val)}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="Pilih Kategori" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {BAKERY_INVENTORY_CATEGORIES.map((cat) => (
+                      <SelectItem key={cat} value={cat} className="text-xs">{cat}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold">Satuan Unit</Label>
+                <Select
+                  value={formData.unitType}
+                  onValueChange={(val) => handleSelectChange('unitType', val)}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="Satuan" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="kg" className="text-xs">Kilogram (kg)</SelectItem>
+                    <SelectItem value="gram" className="text-xs">Gram (g)</SelectItem>
+                    <SelectItem value="liter" className="text-xs">Liter (L)</SelectItem>
+                    <SelectItem value="butir" className="text-xs">Butir</SelectItem>
+                    <SelectItem value="dus" className="text-xs">Dus / Box</SelectItem>
+                    <SelectItem value="pcs" className="text-xs">Pcs / Lembar</SelectItem>
+                    <SelectItem value="pack" className="text-xs">Pack</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label htmlFor="quantity" className="text-xs font-semibold">Jumlah Stok Fisik</Label>
+                <Input
+                  id="quantity"
+                  type="number"
+                  step="any"
+                  value={formData.quantity}
+                  onChange={handleInputChange}
+                  placeholder="0"
+                  className="h-8 text-xs"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="minThreshold" className="text-xs font-semibold">Batas Minimum Peringatan</Label>
+                <Input
+                  id="minThreshold"
+                  type="number"
+                  step="any"
+                  value={formData.minThreshold}
+                  onChange={handleInputChange}
+                  placeholder="Contoh: 5"
+                  className="h-8 text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label htmlFor="costPerUnit" className="text-xs font-semibold">Harga Modal per Satuan (Rp)</Label>
+                <Input
+                  id="costPerUnit"
+                  type="number"
+                  value={formData.costPerUnit}
+                  onChange={handleInputChange}
+                  placeholder="Contoh: 15000"
+                  className="h-8 text-xs"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="supplier" className="text-xs font-semibold">Supplier / Pemasok</Label>
+                <Input
+                  id="supplier"
+                  value={formData.supplier}
+                  onChange={handleInputChange}
+                  placeholder="Contoh: PT Bogasari"
+                  className="h-8 text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold">Tanggal Kedaluwarsa (Opsional)</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      'w-full h-8 justify-start text-left text-xs font-normal',
+                      !formData.expirationDate && 'text-muted-foreground'
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                    {formData.expirationDate ? (
+                      format(formData.expirationDate, 'd MMMM yyyy', { locale: idLocale })
+                    ) : (
+                      <span>Pilih tanggal kedaluwarsa...</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={formData.expirationDate}
+                    onSelect={handleDateSelect}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <DialogFooter className="pt-2">
+              <Button type="button" variant="outline" size="sm" onClick={handleCloseForm} className="h-8 text-xs">
+                Batal
+              </Button>
+              <Button type="submit" size="sm" className="h-8 text-xs font-bold bg-primary text-primary-foreground">
+                {editingItem ? 'Simpan Perubahan' : 'Tambah Bahan'}
+              </Button>
             </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </>

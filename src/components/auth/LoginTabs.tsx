@@ -5,8 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useRouter } from 'next/navigation';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, getAuth } from 'firebase/auth';
-import { app } from '@/lib/firebase';
+import { supabase } from '@/lib/supabase';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,37 +15,34 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 
-// Zod schemas for validation
 const signInSchema = z.object({
-  email: z.string().email('Invalid email address'),
-  password: z.string().min(1, 'Password is required'),
+  email: z.string().email('Format email tidak valid'),
+  password: z.string().min(1, 'Password wajib diisi'),
 });
 
 const signUpSchema = z.object({
-    email: z.string().email('Invalid email address'),
-    password: z.string().min(6, 'Password must be at least 6 characters'),
-    confirmPassword: z.string(),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords don't match",
-    path: ['confirmPassword'],
-  });
+  email: z.string().email('Format email tidak valid'),
+  password: z.string().min(6, 'Password minimal 6 karakter'),
+  confirmPassword: z.string(),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Konfirmasi password tidak cocok",
+  path: ['confirmPassword'],
+});
 
 type SignInForm = z.infer<typeof signInSchema>;
 type SignUpForm = z.infer<typeof signUpSchema>;
 
-
-// Google Logo SVG
 const GoogleIcon = () => (
-    <svg className="mr-2 h-4 w-4" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><title>Google</title><path d="M12.48 10.92v3.28h7.84c-.24 1.84-.85 3.18-1.73 4.1-1.02 1.02-2.62 3.08-4.75 3.08-5.72 0-9.42-4.14-9.42-9.42s3.7-9.42 9.42-9.42c2.86 0 4.88 1.17 6.38 2.58l2.94-2.82C20.02 1.83 16.56 0 12.48 0 5.88 0 .81 5.4 .81 12s5.07 12 11.67 12c3.55 0 6.2-1.23 8.16-3.25 2.05-2.1 2.5-5.05 2.5-7.65 0-.67-.06-1.32-.18-1.95h-10.6z"/></svg>
+  <svg className="mr-2 h-4 w-4" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <title>Google</title>
+    <path d="M12.48 10.92v3.28h7.84c-.24 1.84-.85 3.18-1.73 4.1-1.02 1.02-2.62 3.08-4.75 3.08-5.72 0-9.42-4.14-9.42-9.42s3.7-9.42 9.42-9.42c2.86 0 4.88 1.17 6.38 2.58l2.94-2.82C20.02 1.83 16.56 0 12.48 0 5.88 0 .81 5.4 .81 12s5.07 12 11.67 12c3.55 0 6.2-1.23 8.16-3.25 2.05-2.1 2.5-5.05 2.5-7.65 0-.67-.06-1.32-.18-1.95h-10.6z" fill="currentColor"/>
+  </svg>
 );
-
 
 export function LoginTabs() {
   const router = useRouter();
   const { toast } = useToast();
   const [loading, setLoading] = useState<null | 'email' | 'google'>(null);
-  const auth = getAuth(app);
 
   const { register: registerSignIn, handleSubmit: handleSignInSubmit, formState: { errors: signInErrors } } = useForm<SignInForm>({
     resolver: zodResolver(signInSchema),
@@ -59,10 +55,15 @@ export function LoginTabs() {
   const onSignIn = async (data: SignInForm) => {
     setLoading('email');
     try {
-      await signInWithEmailAndPassword(auth, data.email, data.password);
+      const { data: authData, error } = await supabase.auth.signInWithPassword({
+        email: data.email,
+        password: data.password,
+      });
+      if (error) throw error;
+      toast({ title: 'Berhasil Masuk', description: `Selamat datang kembali, ${authData.user?.email}` });
       router.push('/dashboard');
     } catch (error: any) {
-      toast({ title: 'Sign In Failed', description: error.code, variant: 'destructive' });
+      toast({ title: 'Gagal Masuk', description: error.message || 'Periksa email dan password Anda.', variant: 'destructive' });
     } finally {
       setLoading(null);
     }
@@ -71,10 +72,15 @@ export function LoginTabs() {
   const onSignUp = async (data: SignUpForm) => {
     setLoading('email');
     try {
-      await createUserWithEmailAndPassword(auth, data.email, data.password);
+      const { data: authData, error } = await supabase.auth.signUp({
+        email: data.email,
+        password: data.password,
+      });
+      if (error) throw error;
+      toast({ title: 'Pendaftaran Berhasil', description: 'Akun berhasil dibuat. Silakan periksa email Anda untuk verifikasi atau langsung login.' });
       router.push('/dashboard');
     } catch (error: any) {
-      toast({ title: 'Sign Up Failed', description: error.code, variant: 'destructive' });
+      toast({ title: 'Gagal Mendaftar', description: error.message, variant: 'destructive' });
     } finally {
       setLoading(null);
     }
@@ -83,96 +89,95 @@ export function LoginTabs() {
   const handleGoogleSignIn = async () => {
     setLoading('google');
     try {
-        const provider = new GoogleAuthProvider();
-        await signInWithPopup(auth, provider);
-        router.push('/dashboard');
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/dashboard`,
+        },
+      });
+      if (error) throw error;
     } catch (error: any) {
-        toast({ title: 'Google Sign In Failed', description: error.code, variant: 'destructive' });
+      toast({ title: 'Gagal Masuk Google', description: error.message, variant: 'destructive' });
     } finally {
-        setLoading(null);
+      setLoading(null);
     }
-  }
+  };
 
   return (
     <Tabs defaultValue="sign-in" className="w-full">
-      <TabsList className="grid w-full grid-cols-2">
-        <TabsTrigger value="sign-in">Sign In</TabsTrigger>
-        <TabsTrigger value="sign-up">Sign Up</TabsTrigger>
+      <TabsList className="grid w-full grid-cols-2 bg-secondary/80 p-1 border border-border">
+        <TabsTrigger value="sign-in" className="text-xs font-bold data-[state=active]:bg-background data-[state=active]:text-primary">Masuk</TabsTrigger>
+        <TabsTrigger value="sign-up" className="text-xs font-bold data-[state=active]:bg-background data-[state=active]:text-primary">Daftar Baru</TabsTrigger>
       </TabsList>
       <TabsContent value="sign-in">
-        <Card>
-          <CardHeader>
-            <CardTitle>Welcome Back</CardTitle>
-            <CardDescription>Enter your credentials to access your dashboard.</CardDescription>
+        <Card className="border border-border shadow-sm bg-card">
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-base font-bold text-foreground">Masuk ke Akun</CardTitle>
+            <CardDescription className="text-xs text-muted-foreground">Masuk untuk mengakses sistem kasir dan operasional.</CardDescription>
           </CardHeader>
           <form onSubmit={handleSignInSubmit(onSignIn)}>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email-in">Email</Label>
-                <Input id="email-in" type="email" {...registerSignIn('email')} placeholder="m@example.com" />
-                {signInErrors.email && <p className="text-xs text-destructive">{signInErrors.email.message}</p>}
+            <CardContent className="p-4 space-y-3">
+              <div className="space-y-1">
+                <Label htmlFor="email-in" className="text-xs font-semibold">Email Pengguna</Label>
+                <Input id="email-in" type="email" {...registerSignIn('email')} placeholder="admin@pos.local" className="h-8 text-xs" />
+                {signInErrors.email && <p className="text-[11px] text-destructive">{signInErrors.email.message}</p>}
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="password-in">Password</Label>
-                <Input id="password-in" type="password" {...registerSignIn('password')} />
-                {signInErrors.password && <p className="text-xs text-destructive">{signInErrors.password.message}</p>}
+              <div className="space-y-1">
+                <Label htmlFor="password-in" className="text-xs font-semibold">Kata Sandi</Label>
+                <Input id="password-in" type="password" {...registerSignIn('password')} placeholder="••••••••" className="h-8 text-xs" />
+                {signInErrors.password && <p className="text-[11px] text-destructive">{signInErrors.password.message}</p>}
               </div>
             </CardContent>
-            <CardFooter className="flex-col gap-4">
-              <Button type="submit" className="w-full" disabled={loading === 'email'}>
-                {loading === 'email' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Sign In
+            <CardFooter className="p-4 pt-0 flex flex-col gap-2">
+              <Button type="submit" className="w-full h-8 text-xs font-bold shadow-sm" disabled={loading !== null}>
+                {loading === 'email' && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                Masuk ke Sistem
+              </Button>
+              <Button type="button" variant="outline" className="w-full h-8 text-xs font-medium border-border" onClick={handleGoogleSignIn} disabled={loading !== null}>
+                {loading === 'google' ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <GoogleIcon />}
+                Masuk dengan Akun Google
               </Button>
             </CardFooter>
           </form>
         </Card>
       </TabsContent>
       <TabsContent value="sign-up">
-        <Card>
-          <CardHeader>
-            <CardTitle>Create an Account</CardTitle>
-            <CardDescription>Enter your email and password to get started.</CardDescription>
+        <Card className="border border-border shadow-sm bg-card">
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-base font-bold text-foreground">Buat Akun Staf</CardTitle>
+            <CardDescription className="text-xs text-muted-foreground">Daftarkan akun staf baru untuk sistem kasir.</CardDescription>
           </CardHeader>
-           <form onSubmit={handleSignUpSubmit(onSignUp)}>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email-up">Email</Label>
-                <Input id="email-up" type="email" {...registerSignUp('email')} placeholder="m@example.com" />
-                {signUpErrors.email && <p className="text-xs text-destructive">{signUpErrors.email.message}</p>}
+          <form onSubmit={handleSignUpSubmit(onSignUp)}>
+            <CardContent className="p-4 space-y-3">
+              <div className="space-y-1">
+                <Label htmlFor="email-up" className="text-xs font-semibold">Email Pengguna</Label>
+                <Input id="email-up" type="email" {...registerSignUp('email')} placeholder="staf@pos.local" className="h-8 text-xs" />
+                {signUpErrors.email && <p className="text-[11px] text-destructive">{signUpErrors.email.message}</p>}
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="password-up">Password</Label>
-                <Input id="password-up" type="password" {...registerSignUp('password')} />
-                 {signUpErrors.password && <p className="text-xs text-destructive">{signUpErrors.password.message}</p>}
+              <div className="space-y-1">
+                <Label htmlFor="password-up" className="text-xs font-semibold">Kata Sandi</Label>
+                <Input id="password-up" type="password" {...registerSignUp('password')} placeholder="••••••••" className="h-8 text-xs" />
+                {signUpErrors.password && <p className="text-[11px] text-destructive">{signUpErrors.password.message}</p>}
               </div>
-               <div className="space-y-2">
-                <Label htmlFor="confirmPassword-up">Confirm Password</Label>
-                <Input id="confirmPassword-up" type="password" {...registerSignUp('confirmPassword')} />
-                 {signUpErrors.confirmPassword && <p className="text-xs text-destructive">{signUpErrors.confirmPassword.message}</p>}
+              <div className="space-y-1">
+                <Label htmlFor="confirmPassword-up" className="text-xs font-semibold">Ulangi Kata Sandi</Label>
+                <Input id="confirmPassword-up" type="password" {...registerSignUp('confirmPassword')} placeholder="••••••••" className="h-8 text-xs" />
+                {signUpErrors.confirmPassword && <p className="text-[11px] text-destructive">{signUpErrors.confirmPassword.message}</p>}
               </div>
             </CardContent>
-            <CardFooter>
-              <Button type="submit" className="w-full" disabled={loading === 'email'}>
-                {loading === 'email' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Sign Up
+            <CardFooter className="p-4 pt-0 flex flex-col gap-2">
+              <Button type="submit" className="w-full h-8 text-xs font-bold shadow-sm" disabled={loading !== null}>
+                {loading === 'email' && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                Daftar Akun Baru
+              </Button>
+              <Button type="button" variant="outline" className="w-full h-8 text-xs font-medium border-border" onClick={handleGoogleSignIn} disabled={loading !== null}>
+                {loading === 'google' ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <GoogleIcon />}
+                Daftar dengan Akun Google
               </Button>
             </CardFooter>
           </form>
         </Card>
       </TabsContent>
-       <div className="relative mt-6">
-        <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t" />
-        </div>
-        <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-card px-2 text-muted-foreground">Or continue with</span>
-        </div>
-      </div>
-
-       <Button variant="outline" className="w-full mt-6" onClick={handleGoogleSignIn} disabled={loading === 'google'}>
-          {loading === 'google' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <GoogleIcon />}
-          Google
-       </Button>
     </Tabs>
   );
 }

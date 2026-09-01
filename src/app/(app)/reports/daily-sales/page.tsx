@@ -1,242 +1,258 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Download, Calendar as CalendarIcon, Banknote, QrCode } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
-import { startOfDay, endOfDay } from 'date-fns';
+import { supabase } from '@/lib/supabase';
+import { startOfDay, endOfDay, format } from 'date-fns';
+import { id as idLocale } from 'date-fns/locale';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import * as xlsx from 'xlsx';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import { parseSafeDate } from '@/lib/utils';
 
 type Sale = {
-    id: string;
-    time: string;
-    item: string;
-    amount: number;
-    paymentMethod: 'cash' | 'qris';
+  id: string;
+  time: string;
+  item: string;
+  amount: number;
+  paymentMethod: 'cash' | 'qris' | string;
 };
 
 const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('id-ID', {
-        style: 'currency',
-        currency: 'IDR',
-        minimumFractionDigits: 0,
-    }).format(value);
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0,
+  }).format(value);
 };
 
 export default function DailySalesPage() {
-    const [date, setDate] = useState<Date>(new Date());
-    const [sales, setSales] = useState<Sale[]>([]);
-    const [loading, setLoading] = useState(true);
-    const { toast } = useToast();
+  const [date, setDate] = useState<Date>(new Date());
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
 
-    useEffect(() => {
-        setLoading(true);
-        const start = startOfDay(date);
-        const end = endOfDay(date);
+  const loadLocalSales = (targetDate: Date) => {
+    let orders: any[] = [];
+    try {
+      const saved = localStorage.getItem('pos_orders');
+      orders = saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      orders = [];
+    }
 
-        const q = query(collection(db, 'orders'), where('timestamp', '>=', start), where('timestamp', '<=', end));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetchedSales: Sale[] = [];
-            snapshot.forEach((doc) => {
-                const data = doc.data();
-                fetchedSales.push({
-                    id: doc.id,
-                    time: (data.timestamp as Timestamp).toDate().toLocaleTimeString(),
-                    item: data.items.map((item: any) => item.name).join(', '),
-                    amount: data.total,
-                    paymentMethod: data.paymentMethod,
-                });
-            });
-            setSales(fetchedSales.sort((a,b) => b.time.localeCompare(a.time)));
-            setLoading(false);
-        }, (error) => {
-            console.error("Error fetching daily sales: ", error);
-            setLoading(false);
-        });
+    const start = startOfDay(targetDate).getTime();
+    const end = endOfDay(targetDate).getTime();
 
-        return () => unsubscribe();
-    }, [date]);
+    const filtered = (Array.isArray(orders) ? orders : []).filter(ord => {
+      const d = parseSafeDate(ord.created_at || ord.timestamp);
+      const t = d.getTime();
+      return t >= start && t <= end;
+    });
 
-    const handleExport = () => {
-        if (sales.length === 0) {
-            toast({ title: 'No Data', description: 'There are no sales to export for the selected date.', variant: 'default' });
-            return;
+    const parsed: Sale[] = filtered.map(ord => {
+      const d = parseSafeDate(ord.created_at || ord.timestamp);
+      return {
+        id: ord.id ? String(ord.id).slice(0, 8).toUpperCase() : 'TRX',
+        time: d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+        item: (ord.items || []).map((item: any) => `${item.name} (x${item.quantity})`).join(', ') || 'Item Penjualan',
+        amount: Number(ord.gross_revenue || ord.grossRevenue || ord.total || 0),
+        paymentMethod: ord.payment_method || ord.paymentMethod || 'Tunai',
+      };
+    });
+
+    setSales(parsed);
+  };
+
+  useEffect(() => {
+    setLoading(true);
+    const fetchSupabaseDailySales = async () => {
+      try {
+        const start = startOfDay(date).toISOString();
+        const end = endOfDay(date).toISOString();
+
+        const { data, error } = await supabase
+          .from('orders')
+          .select('*')
+          .gte('created_at', start)
+          .lte('created_at', end)
+          .order('created_at', { ascending: false });
+
+        if (!error && data) {
+          const fetchedSales: Sale[] = data.map((d: any) => ({
+            id: String(d.id).slice(0, 8).toUpperCase(),
+            time: parseSafeDate(d.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+            item: (d.items || []).map((item: any) => `${item.name} (x${item.quantity})`).join(', ') || 'Item Penjualan',
+            amount: Number(d.gross_revenue || d.total || 0),
+            paymentMethod: d.payment_method || 'Tunai',
+          }));
+          setSales(fetchedSales);
+        } else {
+          loadLocalSales(date);
         }
-
-        toast({ title: 'Exporting...', description: 'Your Excel file is being generated.' });
-        
-        const dataToExport = sales.map(sale => ({
-            "Transaction ID": sale.id,
-            "Time": sale.time,
-            "Items": sale.item,
-            "Payment Method": sale.paymentMethod,
-            "Amount": sale.amount,
-        }));
-
-        const ws = xlsx.utils.json_to_sheet(dataToExport, {
-            header: ["Transaction ID", "Time", "Items", "Payment Method", "Amount"],
-        });
-
-        const range = xlsx.utils.decode_range(ws['!ref']!);
-        for (let R = range.s.r + 1; R <= range.e.r; ++R) {
-            const cell_address = {c: 4, r: R}; // Amount column
-            const cell_ref = xlsx.utils.encode_cell(cell_address);
-            if (ws[cell_ref]) {
-                ws[cell_ref].t = 'n';
-                ws[cell_ref].z = '"Rp"#,##0';
-            }
-        }
-        
-        const colWidths = Object.keys(dataToExport[0]).map((key, i) => {
-             const dataForCol = dataToExport.map(row => String(row[key as keyof typeof row]));
-             const header = ["Transaction ID", "Time", "Items", "Payment Method", "Amount"][i];
-             const maxLength = Math.max(
-                (header || '').toString().length,
-                ...dataForCol.map(cell => cell.length)
-             );
-             return { wch: maxLength + 4 };
-        });
-        if (colWidths[0]) colWidths[0].wch = 20; // Transaction ID
-        if (colWidths[2]) colWidths[2].wch = 50; // Items
-        ws['!cols'] = colWidths;
-        
-        for (let R = range.s.r; R <= range.e.r; ++R) {
-            for (let C = range.s.c; C <= range.e.c; ++C) {
-                const cellAddress = { c: C, r: R };
-                const cellRef = xlsx.utils.encode_cell(cellAddress);
-                if (!ws[cellRef]) continue;
-
-                const defaultStyle = {
-                    alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-                    border: {
-                        top: { style: 'thin', color: { rgb: "DDDDDD" } },
-                        bottom: { style: 'thin', color: { rgb: "DDDDDD" } },
-                        left: { style: 'thin', color: { rgb: "DDDDDD" } },
-                        right: { style: 'thin', color: { rgb: "DDDDDD" } },
-                    }
-                };
-                
-                if (R === 0) {
-                     ws[cellRef].s = {
-                        ...defaultStyle,
-                        font: { bold: true },
-                        fill: { fgColor: { rgb: "D9E1F2" } } // A light blue
-                     };
-                } else {
-                    ws[cellRef].s = defaultStyle;
-                    if(C === 4) { // Right align Amount column
-                       ws[cellRef].s.alignment.horizontal = 'right';
-                    }
-                }
-            }
-        }
-
-        const wb = xlsx.utils.book_new();
-        xlsx.utils.book_append_sheet(wb, ws, "Daily Sales");
-        xlsx.writeFile(wb, `BrewFlow_DailySales_${date.toISOString().split('T')[0]}.xlsx`);
+      } catch (e) {
+        loadLocalSales(date);
+      } finally {
+        setLoading(false);
+      }
     };
 
-    const renderTableBody = () => {
-        if (loading) {
-            return Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}>
-                    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-48" /></TableCell>
-                    <TableCell><Skeleton className="h-6 w-24 rounded-md" /></TableCell>
-                    <TableCell className="text-right"><Skeleton className="h-4 w-12 ml-auto" /></TableCell>
-                </TableRow>
-            ));
-        }
+    fetchSupabaseDailySales();
+  }, [date]);
 
-        if (sales.length === 0) {
-            return (
-                <TableRow>
-                    <TableCell colSpan={5} className="text-center h-24">
-                        No sales for the selected date.
-                    </TableCell>
-                </TableRow>
-            );
-        }
+  const handleExport = () => {
+    if (sales.length === 0) {
+      toast({ title: 'Data Kosong', description: 'Tidak ada transaksi pada tanggal yang dipilih.', variant: 'default' });
+      return;
+    }
 
-        return sales.map(sale => (
-            <TableRow key={sale.id} className="[&_td:not(:last-child)]:border-r">
-                <TableCell className="font-mono text-xs">{sale.id}</TableCell>
-                <TableCell>{sale.time}</TableCell>
-                <TableCell className="font-medium max-w-xs truncate">{sale.item}</TableCell>
-                <TableCell>
-                    <div className="flex items-center gap-2">
-                         {sale.paymentMethod === 'cash' ? <Banknote className="h-4 w-4 text-muted-foreground"/> : <QrCode className="h-4 w-4 text-muted-foreground"/>}
-                         <span className="capitalize">{sale.paymentMethod}</span>
-                    </div>
-                </TableCell>
-                <TableCell className="text-right">{formatCurrency(sale.amount)}</TableCell>
-            </TableRow>
-        ));
-    };
+    toast({ title: 'Mengekspor...', description: 'File Excel sedang dipersiapkan.' });
+    
+    const dataToExport = sales.map(sale => ({
+      'ID Struk': sale.id,
+      'Waktu Transaksi': sale.time,
+      'Daftar Item': sale.item,
+      'Metode Pembayaran': sale.paymentMethod === 'cash' || sale.paymentMethod === 'Tunai' ? 'Tunai' : 'QRIS',
+      'Total Belanja (Rp)': sale.amount,
+    }));
 
+    const exportFileName = `Laporan_Penjualan_${format(parseSafeDate(date), 'yyyy-MM-dd')}.xlsx`;
 
-    return (
-        <div className="space-y-6">
-            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold">Daily Sales History</h1>
-                    <p className="text-muted-foreground">A chronological list of all transactions for a selected day.</p>
-                </div>
-                <div className="flex items-center gap-2">
-                    <Popover>
-                        <PopoverTrigger asChild>
-                            <Button variant="outline" className="w-full justify-start md:w-auto">
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {date.toLocaleDateString()}
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                            <Calendar 
-                                mode="single" 
-                                selected={date} 
-                                onSelect={(d) => d && setDate(d)} 
-                                initialFocus
-                            />
-                        </PopoverContent>
-                    </Popover>
-                    <Button onClick={handleExport}>
-                        <Download className="mr-2 h-4 w-4" />
-                        Export
-                    </Button>
-                </div>
-            </div>
+    const ws = xlsx.utils.json_to_sheet(dataToExport);
+    const wb = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(wb, ws, "Penjualan Harian");
+    xlsx.writeFile(wb, exportFileName);
+    toast({ title: 'Selesai', description: `File ${exportFileName} berhasil diunduh.` });
+  };
 
-            <Card>
-                <CardContent className="pt-6">
-                    <ScrollArea className="w-full whitespace-nowrap rounded-md border">
-                        <Table>
-                            <TableHeader className="bg-accent">
-                                <TableRow className="[&_th:not(:last-child)]:border-r">
-                                    <TableHead>Transaction ID</TableHead>
-                                    <TableHead>Time</TableHead>
-                                    <TableHead>Items</TableHead>
-                                    <TableHead>Payment Method</TableHead>
-                                    <TableHead className="text-right">Amount</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {renderTableBody()}
-                            </TableBody>
-                        </Table>
-                         <ScrollBar orientation="horizontal" />
-                    </ScrollArea>
-                </CardContent>
-            </Card>
+  const totalSales = sales.reduce((acc, sale) => acc + sale.amount, 0);
+  const totalCash = sales.filter(s => s.paymentMethod === 'cash' || s.paymentMethod === 'Tunai').reduce((acc, sale) => acc + sale.amount, 0);
+  const totalQris = sales.filter(s => s.paymentMethod === 'qris' || s.paymentMethod === 'QRIS').reduce((acc, sale) => acc + sale.amount, 0);
+
+  return (
+    <div className="space-y-4">
+      {/* Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-foreground">Laporan Penjualan Harian</h1>
+          <p className="text-xs text-muted-foreground">Rincian seluruh struk transaksi kasir per tanggal transaksi.</p>
         </div>
-    )
+        <div className="flex items-center gap-2">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 text-xs font-semibold border-border">
+                <CalendarIcon className="mr-1.5 h-3.5 w-3.5 text-primary" />
+                {format(parseSafeDate(date), 'd MMMM yyyy', { locale: idLocale })}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <Calendar mode="single" selected={date} onSelect={(newDate) => newDate && setDate(newDate)} initialFocus />
+            </PopoverContent>
+          </Popover>
+          <Button onClick={handleExport} size="sm" className="h-8 text-xs font-bold bg-primary text-primary-foreground shadow-sm">
+            <Download className="mr-1.5 h-3.5 w-3.5" />
+            Ekspor Excel
+          </Button>
+        </div>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Omzet Harian</CardTitle>
+            <Banknote className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold tracking-tight text-foreground">{formatCurrency(totalSales)}</div>
+            <p className="text-xs text-muted-foreground mt-1">{sales.length} transaksi selesai</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Penerimaan Tunai</CardTitle>
+            <Banknote className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold tracking-tight text-foreground">{formatCurrency(totalCash)}</div>
+            <p className="text-xs text-muted-foreground mt-1">Uang fisik di laci kasir</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Penerimaan QRIS</CardTitle>
+            <QrCode className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold tracking-tight text-foreground">{formatCurrency(totalQris)}</div>
+            <p className="text-xs text-muted-foreground mt-1">Non-tunai via QRIS</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Sales Transactions Table */}
+      <Card className="border border-border shadow-sm bg-card">
+        <CardContent className="p-0">
+          <ScrollArea className="h-96 w-full">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/30">
+                  <TableHead className="text-xs font-bold text-foreground h-8 w-24">Waktu</TableHead>
+                  <TableHead className="text-xs font-bold text-foreground h-8">Item Roti / Kue</TableHead>
+                  <TableHead className="text-xs font-bold text-foreground h-8 w-28">Metode</TableHead>
+                  <TableHead className="text-xs font-bold text-foreground h-8 text-right w-36">Total Belanja</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  Array.from({ length: 4 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-48" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                      <TableCell className="text-right"><Skeleton className="h-4 w-24 ml-auto" /></TableCell>
+                    </TableRow>
+                  ))
+                ) : sales.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center text-muted-foreground py-8 text-xs">
+                      Tidak ada transaksi pada tanggal ini.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  sales.map((sale) => (
+                    <TableRow key={sale.id} className="hover:bg-muted/30 transition-colors">
+                      <TableCell className="text-xs font-mono text-muted-foreground whitespace-nowrap">{sale.time}</TableCell>
+                      <TableCell className="text-xs font-medium text-foreground">{sale.item}</TableCell>
+                      <TableCell className="text-xs whitespace-nowrap">
+                        <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                          sale.paymentMethod === 'cash' || sale.paymentMethod === 'Tunai'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-300'
+                            : 'bg-sky-50 text-sky-700 border border-sky-300'
+                        }`}>
+                          {sale.paymentMethod === 'cash' || sale.paymentMethod === 'Tunai' ? 'Tunai' : 'QRIS'}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-xs font-bold text-right text-foreground whitespace-nowrap">
+                        {formatCurrency(sale.amount)}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+            <ScrollBar orientation="horizontal" />
+          </ScrollArea>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }

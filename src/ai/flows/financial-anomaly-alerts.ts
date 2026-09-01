@@ -1,5 +1,3 @@
-'use server';
-
 /**
  * @fileOverview AI-driven analysis tool that proactively discovers trends and generates automated alerts when financial abnormalities occur within the store.
  *

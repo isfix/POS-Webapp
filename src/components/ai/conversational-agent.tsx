@@ -1,5 +1,6 @@
 'use client';
-import { useState, useRef, useEffect, type FormEvent } from 'react';
+
+import { useState, useRef, useEffect } from 'react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -15,7 +16,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 
 const chatSchema = z.object({
-  prompt: z.string().min(1, 'Message cannot be empty.'),
+  prompt: z.string().min(1, 'Pesan tidak boleh kosong.'),
 });
 type ChatInput = z.infer<typeof chatSchema>;
 
@@ -55,7 +56,7 @@ export function ConversationalAgent() {
 
   useEffect(() => {
     if (errors.prompt) {
-      toast({ title: 'Error', description: errors.prompt.message, variant: 'destructive' });
+      toast({ title: 'Perhatian', description: errors.prompt.message, variant: 'destructive' });
     }
   }, [errors.prompt, toast]);
 
@@ -77,8 +78,8 @@ export function ConversationalAgent() {
     } catch (error) {
       console.error('Error running agent:', error);
       toast({
-        title: 'Error',
-        description: 'An error occurred while processing your request.',
+        title: 'Gagal',
+        description: 'Terjadi kesalahan saat memproses permintaan AI.',
         variant: 'destructive',
       });
     } finally {
@@ -101,43 +102,40 @@ export function ConversationalAgent() {
   };
   
   const handleConfirm = async (messageId: string) => {
-    // Disable the buttons for the message that was actioned
-    const updatedMessages = messages.map(m => m.id === messageId ? {...m, confirmationStatus: 'confirmed'} : m);
+    const updatedMessages: Message[] = messages.map(m => m.id === messageId ? ({ ...m, confirmationStatus: 'confirmed' as const }) : m);
     
     const userConfirmMessage: Message = { id: `user-${Date.now()}`, role: 'user', content: 'User confirmed the action.' };
-    const messagesWithConfirmation = [...updatedMessages, userConfirmMessage];
+    const messagesWithConfirmation: Message[] = [...updatedMessages, userConfirmMessage];
     setMessages(messagesWithConfirmation);
 
     const historyForConfirmation: ConversationHistory = updatedMessages.map(msg => ({
-        role: msg.role === 'assistant' ? 'model' : 'user',
-        // For history, we need the original AI question with the token if it was a confirmation
-        content: msg.isConfirmationRequest ? `${CONFIRMATION_TOKEN} ${msg.content}` : msg.content,
+      role: msg.role === 'assistant' ? 'model' : 'user',
+      content: msg.isConfirmationRequest ? `${CONFIRMATION_TOKEN} ${msg.content}` : msg.content,
     }));
 
     await executeAgentTurn('User confirmed the action.', historyForConfirmation);
-  }
+  };
 
   const handleCancel = (messageId: string) => {
-     setMessages(prev => prev.map(m => m.id === messageId ? {...m, confirmationStatus: 'cancelled'} : m));
-     const assistantResponseMessage: Message = { id: `asst-${Date.now()}`, role: 'assistant', content: "Okay, I've cancelled that request." };
-     setMessages(prev => [...prev, assistantResponseMessage]);
-  }
-
+    setMessages(prev => prev.map(m => m.id === messageId ? ({ ...m, confirmationStatus: 'cancelled' as const }) : m));
+    const assistantResponseMessage: Message = { id: `asst-${Date.now()}`, role: 'assistant', content: "Baik, permintaan tersebut telah dibatalkan." };
+    setMessages(prev => [...prev, assistantResponseMessage]);
+  };
 
   return (
-    <Card className="h-full flex flex-col max-h-[calc(100vh-12rem)]">
+    <Card className="h-full flex flex-col max-h-[calc(100vh-12rem)] border border-border shadow-sm bg-card">
       <CardContent className="flex-grow p-4 overflow-hidden">
         <ScrollArea className="h-full" ref={scrollAreaRef}>
-          <div className="space-y-4 pr-4">
+          <div className="space-y-3 pr-3">
             {messages.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground p-4">
-                <Bot className="h-12 w-12 sm:h-16 sm:w-16 mb-4 text-primary" />
-                <h2 className="text-lg sm:text-xl font-semibold mb-2">Hello, I'm Aura!</h2>
-                <p className="text-sm sm:text-base">I can help you manage your cafe. Try asking me to:</p>
-                <ul className="list-disc list-inside mt-2 text-left text-xs sm:text-sm">
-                  <li>"Add 'Iced Latte' to Coffee for $4.50"</li>
-                  <li>"How many 'Robusta Beans' in stock?"</li>
-                  <li>"Delete the 'Muffin' from the menu"</li>
+                <Bot className="h-10 w-10 mb-3 text-primary" />
+                <h2 className="text-base font-bold text-foreground mb-1">Asisten AI POS</h2>
+                <p className="text-xs">Asisten cerdas untuk operasional kasir dan toko. Coba tanyakan hal seperti:</p>
+                <ul className="list-disc list-inside mt-2 text-left text-xs space-y-1 bg-secondary/50 p-3 rounded-lg border border-border">
+                  <li>"Tambah menu 'Croissant Butter' kategori Pastry seharga 25.000"</li>
+                  <li>"Berapa sisa stok 'Tepung Terigu' di gudang?"</li>
+                  <li>"Bahan apa saja yang stoknya sudah menipis hari ini?"</li>
                 </ul>
               </div>
             )}
@@ -145,61 +143,65 @@ export function ConversationalAgent() {
               <div key={message.id}>
                 <div
                   className={cn(
-                    'flex items-start gap-3',
+                    'flex items-start gap-2.5',
                     message.role === 'user' ? 'justify-end' : 'justify-start'
                   )}
                 >
                   {message.role === 'assistant' && (
-                    <Avatar className="h-8 w-8">
-                      <AvatarFallback className="bg-primary text-primary-foreground"><Bot className="h-5 w-5" /></AvatarFallback>
+                    <Avatar className="h-7 w-7 shrink-0 border border-primary/30">
+                      <AvatarFallback className="bg-primary text-primary-foreground text-xs"><Bot className="h-4 w-4" /></AvatarFallback>
                     </Avatar>
                   )}
                   <div
                     className={cn(
-                      'max-w-[80%] rounded-xl px-4 py-2 text-sm whitespace-pre-wrap',
+                      'max-w-[80%] rounded-xl px-3.5 py-2 text-xs whitespace-pre-wrap leading-relaxed shadow-sm',
                       message.role === 'user'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted'
+                        ? 'bg-primary text-primary-foreground font-medium'
+                        : 'bg-secondary text-foreground border border-border'
                     )}
                   >
                     {message.content}
                   </div>
                   {message.role === 'user' && (
-                    <Avatar className="h-8 w-8">
-                      <AvatarFallback><User className="h-5 w-5" /></AvatarFallback>
+                    <Avatar className="h-7 w-7 shrink-0 border border-border">
+                      <AvatarFallback className="bg-muted text-foreground text-xs"><User className="h-4 w-4" /></AvatarFallback>
                     </Avatar>
                   )}
                 </div>
-                 {message.isConfirmationRequest && message.confirmationStatus === 'pending' && (
-                    <div className="flex gap-2 mt-2 ml-11">
-                        <Button size="sm" onClick={() => handleConfirm(message.id)}>Confirm</Button>
-                        <Button size="sm" variant="outline" onClick={() => handleCancel(message.id)}>Cancel</Button>
-                    </div>
+                {message.isConfirmationRequest && message.confirmationStatus === 'pending' && (
+                  <div className="flex gap-2 mt-2 ml-10">
+                    <Button size="sm" onClick={() => handleConfirm(message.id)} className="h-7 text-xs font-bold bg-primary text-primary-foreground">
+                      Ya, Lanjutkan
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => handleCancel(message.id)} className="h-7 text-xs">
+                      Batalkan
+                    </Button>
+                  </div>
                 )}
               </div>
             ))}
             {isLoading && (
-              <div className="flex items-start gap-3 justify-start">
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="bg-primary text-primary-foreground"><Bot className="h-5 w-5" /></AvatarFallback>
+              <div className="flex items-start gap-2.5 justify-start">
+                <Avatar className="h-7 w-7 shrink-0 border border-primary/30">
+                  <AvatarFallback className="bg-primary text-primary-foreground text-xs"><Bot className="h-4 w-4" /></AvatarFallback>
                 </Avatar>
-                <div className="bg-muted rounded-xl px-4 py-3">
-                  <Loader2 className="h-5 w-5 animate-spin" />
+                <div className="bg-secondary border border-border rounded-xl px-3.5 py-2.5">
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
                 </div>
               </div>
             )}
           </div>
         </ScrollArea>
       </CardContent>
-      <CardFooter className="p-2 sm:p-4 border-t">
+      <CardFooter className="p-3 border-t border-border bg-card">
         <form
           onSubmit={handleSubmit(onSubmit)}
           className="flex w-full items-center gap-2"
         >
           <Textarea
             {...register('prompt')}
-            placeholder="Type your message here..."
-            className="flex-1 resize-none"
+            placeholder="Ketik instruksi atau pertanyaan untuk Asisten AI..."
+            className="flex-1 resize-none h-9 min-h-[36px] text-xs py-2 bg-background border-border"
             rows={1}
             disabled={isLoading}
             onKeyDown={(e) => {
@@ -209,9 +211,9 @@ export function ConversationalAgent() {
               }
             }}
           />
-          <Button type="submit" disabled={isLoading} size="icon">
+          <Button type="submit" disabled={isLoading} size="icon" className="h-9 w-9 bg-primary text-primary-foreground shadow-sm shrink-0">
             <Send className="h-4 w-4" />
-            <span className="sr-only">Send</span>
+            <span className="sr-only">Kirim</span>
           </Button>
         </form>
       </CardFooter>

@@ -1,8 +1,7 @@
-
 import {
   LayoutDashboard,
   Database,
-  Cpu,
+  Bot,
   Settings,
   Coins,
   CalendarCheck,
@@ -17,67 +16,67 @@ import {
   ReceiptText,
 } from 'lucide-react';
 
-const iconSize = 16;
+const iconSize = 18;
 
 export const SIDENAV_ITEMS = [
   {
-    title: 'Dashboard',
+    title: 'Dasbor',
     path: '/dashboard',
     icon: <LayoutDashboard size={iconSize} />,
   },
-   {
-    title: 'Point of Sale',
+  {
+    title: 'Kasir (POS)',
     path: '/pos',
     icon: <ShoppingCart size={iconSize} />,
   },
   {
-    title: 'Reports',
+    title: 'Laporan',
     path: '/reports',
     icon: <ClipboardList size={iconSize} />,
     submenu: true,
     subMenuItems: [
-      { title: 'End of Day', path: '/reports/end-of-day', icon: <CalendarCheck size={iconSize} /> },
-      { title: 'End of Month', path: '/reports/end-of-month', icon: <BarChart3 size={iconSize} /> },
-      { title: 'Daily Sales', path: '/reports/daily-sales', icon: <Coins size={iconSize} /> },
-      { title: 'Financial Statements', path: '/reports/financial-statements', icon: <BookText size={iconSize} /> },
+      { title: 'Tutup Harian', path: '/reports/end-of-day', icon: <CalendarCheck size={iconSize} /> },
+      { title: 'Tutup Bulanan', path: '/reports/end-of-month', icon: <BarChart3 size={iconSize} /> },
+      { title: 'Penjualan Harian', path: '/reports/daily-sales', icon: <Coins size={iconSize} /> },
+      { title: 'Laporan Keuangan', path: '/reports/financial-statements', icon: <BookText size={iconSize} /> },
     ],
   },
   {
-    title: 'Financials',
+    title: 'Keuangan',
     path: '/financials',
     icon: <TrendingUp size={iconSize} />,
     submenu: true,
     subMenuItems: [
-      { title: 'Projections', path: '/financials/projections', icon: <LineChart size={iconSize} /> },
-      { title: 'Expenses', path: '/expenses', icon: <ReceiptText size={iconSize} /> },
+      { title: 'Proyeksi Keuangan', path: '/financials/projections', icon: <LineChart size={iconSize} /> },
+      { title: 'Beban & Pengeluaran', path: '/expenses', icon: <ReceiptText size={iconSize} /> },
     ],
   },
   {
-    title: 'Inventory',
+    title: 'Stok Bahan & Barang',
     path: '/inventory',
     icon: <PackageSearch size={iconSize} />,
   },
   {
-    title: 'Asset Management',
+    title: 'Aset & Peralatan Toko',
     path: '/assets',
     icon: <Archive size={iconSize} />,
   },
   {
-    title: 'Data Management',
+    title: 'Katalog Menu & Produk',
     path: '/data',
     icon: <Database size={iconSize} />,
   },
   {
-    title: 'AI Tools',
+    title: 'Asisten AI Bakery',
     path: '/ai-tools',
-    icon: <Cpu size={iconSize} />,
+    icon: <Bot size={iconSize} />,
   },
 ];
 
 export const SIDENAV_FOOTER_ITEMS = [
-    {
-        title: 'Settings',
-        path: '/settings',
-        icon: <Settings size={iconSize} />,
-    }
-]
+  {
+    title: 'Pengaturan',
+    path: '/settings',
+    icon: <Settings size={iconSize} />,
+  },
+];
