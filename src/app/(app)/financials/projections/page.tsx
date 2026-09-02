@@ -201,7 +201,7 @@ export default function FinancialProjectionsPage() {
     toast({ title: "Mengekspor...", description: "File Excel sedang dipersiapkan." });
 
     try {
-      exportProjectionToExcel(projection);
+      await exportProjectionToExcel(projection);
       toast({ title: "Selesai", description: "File Proyeksi_Keuangan.xlsx berhasil diunduh." });
     } catch (error) {
       console.error("Export failed:", error);

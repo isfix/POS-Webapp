@@ -9,10 +9,9 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { supabase } from '@/lib/supabase';
 import { startOfDay, endOfDay, format } from 'date-fns';
-import { id as idLocale } from 'date-fns/locale';
+import { id as idLocale } from 'date-fns/locale/id';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
-import * as xlsx from 'xlsx';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { parseSafeDate } from '@/lib/utils';
 
@@ -106,7 +105,7 @@ export default function DailySalesPage() {
     fetchSupabaseDailySales();
   }, [date]);
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (sales.length === 0) {
       toast({ title: 'Data Kosong', description: 'Tidak ada transaksi pada tanggal yang dipilih.', variant: 'default' });
       return;
@@ -124,6 +123,7 @@ export default function DailySalesPage() {
 
     const exportFileName = `Laporan_Penjualan_${format(parseSafeDate(date), 'yyyy-MM-dd')}.xlsx`;
 
+    const xlsx = await import('xlsx');
     const ws = xlsx.utils.json_to_sheet(dataToExport);
     const wb = xlsx.utils.book_new();
     xlsx.utils.book_append_sheet(wb, ws, "Penjualan Harian");

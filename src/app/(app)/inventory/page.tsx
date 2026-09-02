@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { withFallback, mutateWithLocalSync } from '@/lib/db';
+import { recordAudit } from '@/actions/audit';
 import { useToast } from '@/hooks/use-toast';
 
 import { InventoryTable, type InventoryItem } from '@/components/inventory/inventory-table';
@@ -59,9 +60,19 @@ export default function InventoryPage() {
     };
     const updated = [newItem, ...inventoryItems];
     setInventoryItems(updated);
-    toast({ title: 'Berhasil', description: 'Stok bahan baku baru berhasil ditambahkan.' });
 
-    await mutateWithLocalSync('rotikita_inventory', updated, () =>
+    recordAudit({
+      action: `Menambah bahan baku '${newItemData.name}' (${newItemData.quantity} ${newItemData.unitType})`,
+      entityType: 'inventory',
+      entityId: tempId,
+      details: {
+        category: newItemData.category,
+        quantity: newItemData.quantity,
+        costPerUnit: newItemData.costPerUnit,
+      },
+    });
+
+    const res = await mutateWithLocalSync('rotikita_inventory', updated, () =>
       supabase.from('inventory').insert([{
         name: newItemData.name,
         category: newItemData.category,
@@ -73,14 +84,32 @@ export default function InventoryPage() {
         cost_per_unit: newItemData.costPerUnit,
       }])
     );
+
+    if (res.ok) {
+      toast({ title: 'Berhasil', description: 'Stok bahan baku baru berhasil ditambahkan.' });
+    } else {
+      toast({
+        title: 'Tersimpan Lokal',
+        description: 'Gagal sinkron ke database. Perubahan tersimpan lokal dan akan disinkronkan otomatis saat online.',
+      });
+    }
   };
   
   const handleEditItem = async (itemToUpdate: InventoryItem) => {
     const updated = inventoryItems.map(item => item.id === itemToUpdate.id ? itemToUpdate : item);
     setInventoryItems(updated);
-    toast({ title: 'Berhasil', description: 'Data bahan baku berhasil diperbarui.' });
 
-    await mutateWithLocalSync('rotikita_inventory', updated, () =>
+    recordAudit({
+      action: `Memperbarui stok bahan baku '${itemToUpdate.name}' (${itemToUpdate.quantity} ${itemToUpdate.unitType})`,
+      entityType: 'inventory',
+      entityId: itemToUpdate.id,
+      details: {
+        quantity: itemToUpdate.quantity,
+        costPerUnit: itemToUpdate.costPerUnit,
+      },
+    });
+
+    const res = await mutateWithLocalSync('rotikita_inventory', updated, () =>
       supabase.from('inventory').update({
         name: itemToUpdate.name,
         category: itemToUpdate.category,
@@ -92,16 +121,39 @@ export default function InventoryPage() {
         cost_per_unit: itemToUpdate.costPerUnit,
       }).eq('id', itemToUpdate.id)
     );
+
+    if (res.ok) {
+      toast({ title: 'Berhasil', description: 'Data bahan baku berhasil diperbarui.' });
+    } else {
+      toast({
+        title: 'Tersimpan Lokal',
+        description: 'Gagal sinkron ke database. Perubahan tersimpan lokal dan akan disinkronkan otomatis saat online.',
+      });
+    }
   };
 
   const handleDeleteItem = async (itemToDelete: InventoryItem) => {
     const filtered = inventoryItems.filter(item => item.id !== itemToDelete.id);
     setInventoryItems(filtered);
-    toast({ title: 'Berhasil', description: 'Bahan baku berhasil dihapus.' });
 
-    await mutateWithLocalSync('rotikita_inventory', filtered, () =>
+    recordAudit({
+      action: `Menghapus bahan baku '${itemToDelete.name}'`,
+      entityType: 'inventory',
+      entityId: itemToDelete.id,
+    });
+
+    const res = await mutateWithLocalSync('rotikita_inventory', filtered, () =>
       supabase.from('inventory').delete().eq('id', itemToDelete.id)
     );
+
+    if (res.ok) {
+      toast({ title: 'Berhasil', description: 'Bahan baku berhasil dihapus.' });
+    } else {
+      toast({
+        title: 'Tersimpan Lokal',
+        description: 'Gagal sinkron ke database. Perubahan tersimpan lokal.',
+      });
+    }
   };
 
   const summaryStats = useMemo(() => {

@@ -2,8 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { format } from "date-fns";
-import { id as idLocale } from 'date-fns/locale';
-import * as xlsx from 'xlsx';
+import { id as idLocale } from 'date-fns/locale/id';
 import {
   Table,
   TableBody,
@@ -223,7 +222,7 @@ export function InventoryTable({
     });
   }, [inventoryItems, searchQuery, categoryFilter]);
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (filteredItems.length === 0) {
       toast({ title: 'Data Kosong', description: 'Tidak ada data stok untuk diekspor.', variant: 'default' });
       return;
@@ -245,6 +244,7 @@ export function InventoryTable({
     }));
 
     const exportFileName = `Stok_Bahan_Baku_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+    const xlsx = await import('xlsx');
     const ws = xlsx.utils.json_to_sheet(dataToExport);
     const wb = xlsx.utils.book_new();
     xlsx.utils.book_append_sheet(wb, ws, 'Bahan Baku');
@@ -340,7 +340,7 @@ export function InventoryTable({
               <CardDescription className="text-xs text-muted-foreground">Kelola stok resep, harga beli modal, dan tanggal kedaluwarsa</CardDescription>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button onClick={() => handleOpenForm()} size="sm" className="h-8 text-xs font-bold bg-primary text-primary-foreground shadow-sm">
+              <Button onClick={() => handleOpenForm()} size="sm" className="h-8 text-xs font-bold bg-primary text-primary-foreground shadow-sm" data-testid="add-inventory-btn">
                 <PlusCircle className="mr-1.5 h-3.5 w-3.5" /> Tambah Bahan
               </Button>
               <Button variant="outline" size="sm" onClick={handleExport} className="h-8 text-xs font-semibold border-border">
@@ -361,32 +361,36 @@ export function InventoryTable({
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="h-8 text-xs bg-card">
-                  <SelectValue placeholder="Pilih Kategori" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" className="text-xs font-semibold">Semua Kategori Bahan</SelectItem>
-                  {BAKERY_INVENTORY_CATEGORIES.map((cat) => (
-                    <SelectItem key={cat} value={cat} className="text-xs">{cat}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2">
+                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                  <SelectTrigger className="h-8 text-xs bg-card font-medium">
+                    <SelectValue placeholder="Semua Kategori Bahan" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all" className="text-xs font-semibold">Semua Kategori</SelectItem>
+                    {BAKERY_INVENTORY_CATEGORIES.map((category) => (
+                      <SelectItem key={category} value={category} className="text-xs">
+                        {category}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             {/* Table */}
-            <div className="border border-border rounded-lg overflow-hidden bg-card">
+            <div className="rounded-lg border border-border overflow-hidden bg-card">
               <ScrollArea className="w-full">
                 <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/40 hover:bg-muted/40">
-                      <TableHead className="text-xs font-bold text-foreground h-9">Nama Bahan Baku</TableHead>
-                      <TableHead className="text-xs font-bold text-foreground h-9">Kategori</TableHead>
-                      <TableHead className="text-xs font-bold text-foreground h-9 text-right">Stok Saat Ini</TableHead>
-                      <TableHead className="text-xs font-bold text-foreground h-9">Satuan</TableHead>
-                      <TableHead className="text-xs font-bold text-foreground h-9 text-right">Harga Modal</TableHead>
-                      <TableHead className="text-xs font-bold text-foreground h-9">Kedaluwarsa</TableHead>
-                      <TableHead className="text-xs font-bold text-foreground h-9 text-right w-12"></TableHead>
+                  <TableHeader className="bg-muted/60">
+                    <TableRow className="hover:bg-transparent [&_th]:py-2.5 text-xs font-bold text-foreground">
+                      <TableHead>Nama Bahan Baku</TableHead>
+                      <TableHead>Kategori</TableHead>
+                      <TableHead className="text-right">Stok Fisik</TableHead>
+                      <TableHead>Satuan</TableHead>
+                      <TableHead className="text-right">Harga Modal</TableHead>
+                      <TableHead>Kedaluwarsa</TableHead>
+                      <TableHead className="text-right">Aksi</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>{renderTableBody()}</TableBody>
@@ -397,54 +401,58 @@ export function InventoryTable({
           </CardContent>
         </Card>
 
-        {/* Modal Form Tambah / Edit */}
-        <DialogContent className="max-w-md p-5">
-          <DialogHeader className="pb-2 border-b border-border">
-            <DialogTitle className="text-base font-bold text-foreground">
-              {editingItem ? 'Ubah Data Bahan Baku' : 'Tambah Bahan Baku Baru'}
+        {/* Modal Form Dialog */}
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-bold">
+              {editingItem ? 'Edit Bahan Baku' : 'Tambah Bahan Baku Baru'}
             </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">
-              {editingItem ? 'Perbarui informasi kuantitas atau harga modal bahan.' : 'Masukkan rincian bahan baku bakery ke sistem.'}
+            <DialogDescription className="text-xs">
+              Masukkan informasi detail persediaan bahan baku dapur.
             </DialogDescription>
           </DialogHeader>
-
           <form onSubmit={handleSubmit} className="space-y-3 pt-2">
             <div className="space-y-1">
-              <Label htmlFor="name" className="text-xs font-semibold">Nama Bahan Baku</Label>
+              <Label htmlFor="name" className="text-xs font-semibold">Nama Bahan</Label>
               <Input
                 id="name"
                 value={formData.name}
                 onChange={handleInputChange}
-                placeholder="Contoh: Tepung Terigu Cakra Kembar"
+                placeholder="Contoh: Tepung Terigu Protein Tinggi"
                 className="h-8 text-xs"
+                data-testid="inventory-name-input"
+                required
               />
             </div>
 
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
-                <Label className="text-xs font-semibold">Kategori Bahan</Label>
+                <Label htmlFor="category" className="text-xs font-semibold">Kategori</Label>
                 <Select
                   value={formData.category}
-                  onValueChange={(val) => handleSelectChange('category', val)}
+                  onValueChange={(value) => handleSelectChange('category', value)}
                 >
-                  <SelectTrigger className="h-8 text-xs">
+                  <SelectTrigger id="category" className="h-8 text-xs">
                     <SelectValue placeholder="Pilih Kategori" />
                   </SelectTrigger>
                   <SelectContent>
                     {BAKERY_INVENTORY_CATEGORIES.map((cat) => (
-                      <SelectItem key={cat} value={cat} className="text-xs">{cat}</SelectItem>
+                      <SelectItem key={cat} value={cat} className="text-xs">
+                        {cat}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
+
               <div className="space-y-1">
-                <Label className="text-xs font-semibold">Satuan Unit</Label>
+                <Label htmlFor="unitType" className="text-xs font-semibold">Satuan Unit</Label>
                 <Select
                   value={formData.unitType}
-                  onValueChange={(val) => handleSelectChange('unitType', val)}
+                  onValueChange={(value) => handleSelectChange('unitType', value)}
                 >
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder="Satuan" />
+                  <SelectTrigger id="unitType" className="h-8 text-xs">
+                    <SelectValue placeholder="Pilih Satuan" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="kg" className="text-xs">Kilogram (kg)</SelectItem>
@@ -470,6 +478,8 @@ export function InventoryTable({
                   onChange={handleInputChange}
                   placeholder="0"
                   className="h-8 text-xs"
+                  data-testid="inventory-qty-input"
+                  required
                 />
               </div>
               <div className="space-y-1">
@@ -482,6 +492,8 @@ export function InventoryTable({
                   onChange={handleInputChange}
                   placeholder="Contoh: 5"
                   className="h-8 text-xs"
+                  data-testid="inventory-threshold-input"
+                  required
                 />
               </div>
             </div>
@@ -496,6 +508,7 @@ export function InventoryTable({
                   onChange={handleInputChange}
                   placeholder="Contoh: 15000"
                   className="h-8 text-xs"
+                  data-testid="inventory-cost-input"
                 />
               </div>
               <div className="space-y-1">
@@ -544,7 +557,7 @@ export function InventoryTable({
               <Button type="button" variant="outline" size="sm" onClick={handleCloseForm} className="h-8 text-xs">
                 Batal
               </Button>
-              <Button type="submit" size="sm" className="h-8 text-xs font-bold bg-primary text-primary-foreground">
+              <Button type="submit" size="sm" className="h-8 text-xs font-bold bg-primary text-primary-foreground" data-testid="save-inventory-btn">
                 {editingItem ? 'Simpan Perubahan' : 'Tambah Bahan'}
               </Button>
             </DialogFooter>

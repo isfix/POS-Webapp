@@ -77,7 +77,6 @@ export function ProductCard({ item, quantity, onQuantityChange }: ProductCardPro
             fill
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
             className="object-cover transition-transform duration-300 group-hover:scale-105"
-            unoptimized
             onError={(e) => {
               const target = e.target as HTMLImageElement;
               target.src = 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=400&q=80';
@@ -124,6 +123,7 @@ export function ProductCard({ item, quantity, onQuantityChange }: ProductCardPro
             variant="outline"
             className="w-full h-8 text-xs font-medium"
             onClick={() => onQuantityChange(item.id, 1)}
+            data-testid="add-to-cart-btn"
           >
             <Plus className="mr-1 h-3.5 w-3.5" /> Tambah
           </Button>

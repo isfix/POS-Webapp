@@ -1,17 +1,24 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import dynamic from 'next/dynamic';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Download, Banknote, QrCode, TrendingUp, DollarSign } from 'lucide-react';
-import { Bar, BarChart, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { supabase } from '@/lib/supabase';
 import { startOfMonth, endOfMonth, format, eachDayOfInterval } from 'date-fns';
-import { id as idLocale } from 'date-fns/locale';
+import { id as idLocale } from 'date-fns/locale/id';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
-import * as xlsx from 'xlsx';
 import { parseSafeDate } from '@/lib/utils';
+
+const MonthlySalesChart = dynamic(
+  () => import('@/components/reports/monthly-sales-chart').then((mod) => mod.MonthlySalesChart),
+  {
+    ssr: false,
+    loading: () => <Skeleton className="h-[240px] w-full rounded-xl" />,
+  }
+);
 
 type MonthlyData = {
   date: string;
@@ -32,8 +39,6 @@ const formatCurrency = (value: number) => {
     minimumFractionDigits: 0,
   }).format(value);
 };
-
-const formatChartCurrency = (value: number) => `Rp ${Math.floor(value / 1000)}k`;
 
 export default function EndOfMonthReportPage() {
   const [chartData, setChartData] = useState<MonthlyData[]>([]);
@@ -115,7 +120,7 @@ export default function EndOfMonthReportPage() {
           const localOrders = saved ? JSON.parse(saved) : [];
           calculateMonthlyData(localOrders);
         }
-      } catch (e) {
+      } catch {
         const saved = localStorage.getItem('rotikita_orders');
         const localOrders = saved ? JSON.parse(saved) : [];
         calculateMonthlyData(localOrders);
@@ -127,7 +132,7 @@ export default function EndOfMonthReportPage() {
     fetchSupabaseMonthly();
   }, []);
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (!summary || chartData.length === 0) return;
 
     toast({ title: 'Mengekspor...', description: 'Laporan bulanan sedang disiapkan.' });
@@ -137,6 +142,7 @@ export default function EndOfMonthReportPage() {
       'Omzet Penjualan (Rp)': item.sales,
     }));
 
+    const xlsx = await import('xlsx');
     const ws = xlsx.utils.json_to_sheet(dataToExport);
     const wb = xlsx.utils.book_new();
     xlsx.utils.book_append_sheet(wb, ws, "Rekap Bulanan");
@@ -219,31 +225,7 @@ export default function EndOfMonthReportPage() {
       )}
 
       {/* Monthly Trend Chart */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <div>
-            <CardTitle className="text-sm font-semibold">Tren Penjualan Harian Bulan Ini</CardTitle>
-            <CardDescription className="text-xs">Grafik fluktuasi pendapatan per hari</CardDescription>
-          </div>
-        </CardHeader>
-        <CardContent className="pt-0 pb-3">
-          <div className="h-[200px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 8, right: 8, left: 10, bottom: 0 }}>
-                <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-muted/40" />
-                <XAxis dataKey="date" stroke="#888888" fontSize={10} tickLine={false} axisLine={false} interval={2} />
-                <YAxis stroke="#888888" fontSize={10} tickLine={false} axisLine={false} width={48} tickFormatter={(val: number) => val >= 1000000 ? `${(val/1000000).toFixed(1)}jt` : `${Math.round(val/1000)}rb`} />
-                <Tooltip
-                  formatter={(value: number) => [formatCurrency(value), 'Penjualan']}
-                  labelFormatter={(label) => `Tanggal: ${label}`}
-                  contentStyle={{ backgroundColor: 'var(--card)', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '11px', color: 'var(--foreground)' }}
-                />
-                <Bar dataKey="sales" fill="var(--primary)" radius={[4, 4, 0, 0]} maxBarSize={24} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </CardContent>
-      </Card>
+      <MonthlySalesChart chartData={chartData} />
     </div>
   );
 }

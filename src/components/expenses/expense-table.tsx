@@ -2,8 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { format } from "date-fns";
-import { id as idLocale } from 'date-fns/locale';
-import * as xlsx from 'xlsx';
+import { id as idLocale } from 'date-fns/locale/id';
 import {
   Table,
   TableBody,
@@ -207,7 +206,7 @@ export function ExpenseTable({
     });
   }, [expenses, searchQuery, categoryFilter]);
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (filteredExpenses.length === 0) {
       toast({ title: 'Data Kosong', description: 'Tidak ada data pengeluaran untuk diekspor.', variant: 'default' });
       return;
@@ -224,6 +223,7 @@ export function ExpenseTable({
     }));
 
     const exportFileName = `Beban_Operasional_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+    const xlsx = await import('xlsx');
     const ws = xlsx.utils.json_to_sheet(dataToExport);
     const wb = xlsx.utils.book_new();
     xlsx.utils.book_append_sheet(wb, ws, 'Beban Pengeluaran');

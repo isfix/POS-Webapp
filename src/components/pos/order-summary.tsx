@@ -196,6 +196,7 @@ export function OrderSummary({ cart, subtotal, total, onUpdateQuantity, onClearC
                   value={cashReceived}
                   onChange={(e) => setCashReceived(e.target.value)}
                   className="h-9 text-sm font-bold"
+                  data-testid="cash-received-input"
                 />
               </div>
 
@@ -219,6 +220,7 @@ export function OrderSummary({ cart, subtotal, total, onUpdateQuantity, onClearC
                   size="sm"
                   className="h-6 px-2 text-[11px] font-semibold text-primary"
                   onClick={() => setCashReceived(total.toString())}
+                  data-testid="exact-cash-btn"
                 >
                   Uang Pas
                 </Button>
@@ -248,6 +250,7 @@ export function OrderSummary({ cart, subtotal, total, onUpdateQuantity, onClearC
               onClick={handlePayClick} 
               disabled={isPayButtonDisabled}
               className="text-xs font-bold h-9 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
+              data-testid="pay-btn"
             >
               Bayar Sekarang <ArrowRight className="ml-1 h-3.5 w-3.5" />
             </Button>

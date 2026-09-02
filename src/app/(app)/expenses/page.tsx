@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { withFallback, mutateWithLocalSync } from '@/lib/db';
+import { recordAudit } from '@/actions/audit';
 import { useToast } from '@/hooks/use-toast';
 import { startOfMonth, endOfMonth } from 'date-fns';
 
@@ -56,9 +57,19 @@ export default function ExpensesPage() {
     };
     const updated = [newItem, ...expenses];
     setExpenses(updated);
-    toast({ title: 'Berhasil', description: 'Pengeluaran baru berhasil dicatat.' });
 
-    await mutateWithLocalSync('rotikita_expenses', updated, () =>
+    recordAudit({
+      action: `Mencatat pengeluaran '${newItemData.title}' (${formatCurrency(newItemData.amount)})`,
+      entityType: 'expense',
+      entityId: tempId,
+      details: {
+        category: newItemData.category,
+        amount: newItemData.amount,
+        expenseDate: newItemData.expenseDate,
+      },
+    });
+
+    const res = await mutateWithLocalSync('rotikita_expenses', updated, () =>
       supabase.from('expenses').insert([{
         title: newItemData.title,
         category: newItemData.category,
@@ -67,14 +78,32 @@ export default function ExpensesPage() {
         notes: newItemData.notes,
       }])
     );
+
+    if (res.ok) {
+      toast({ title: 'Berhasil', description: 'Pengeluaran baru berhasil dicatat.' });
+    } else {
+      toast({
+        title: 'Tersimpan Lokal',
+        description: 'Gagal sinkron ke database. Pengeluaran tersimpan lokal dan akan disinkronkan saat online.',
+      });
+    }
   };
 
   const handleEditItem = async (itemToUpdate: Expense) => {
     const updated = expenses.map(item => item.id === itemToUpdate.id ? itemToUpdate : item);
     setExpenses(updated);
-    toast({ title: 'Berhasil', description: 'Catatan pengeluaran berhasil diperbarui.' });
 
-    await mutateWithLocalSync('rotikita_expenses', updated, () =>
+    recordAudit({
+      action: `Memperbarui pengeluaran '${itemToUpdate.title}' (${formatCurrency(itemToUpdate.amount)})`,
+      entityType: 'expense',
+      entityId: itemToUpdate.id,
+      details: {
+        category: itemToUpdate.category,
+        amount: itemToUpdate.amount,
+      },
+    });
+
+    const res = await mutateWithLocalSync('rotikita_expenses', updated, () =>
       supabase.from('expenses').update({
         title: itemToUpdate.title,
         category: itemToUpdate.category,
@@ -83,16 +112,39 @@ export default function ExpensesPage() {
         notes: itemToUpdate.notes,
       }).eq('id', itemToUpdate.id)
     );
+
+    if (res.ok) {
+      toast({ title: 'Berhasil', description: 'Catatan pengeluaran berhasil diperbarui.' });
+    } else {
+      toast({
+        title: 'Tersimpan Lokal',
+        description: 'Gagal sinkron ke database. Perubahan tersimpan lokal dan akan disinkronkan saat online.',
+      });
+    }
   };
 
   const handleDeleteItem = async (itemToDelete: Expense) => {
     const filtered = expenses.filter(item => item.id !== itemToDelete.id);
     setExpenses(filtered);
-    toast({ title: 'Berhasil', description: 'Catatan pengeluaran berhasil dihapus.' });
 
-    await mutateWithLocalSync('rotikita_expenses', filtered, () =>
+    recordAudit({
+      action: `Menghapus pengeluaran '${itemToDelete.title}' (${formatCurrency(itemToDelete.amount)})`,
+      entityType: 'expense',
+      entityId: itemToDelete.id,
+    });
+
+    const res = await mutateWithLocalSync('rotikita_expenses', filtered, () =>
       supabase.from('expenses').delete().eq('id', itemToDelete.id)
     );
+
+    if (res.ok) {
+      toast({ title: 'Berhasil', description: 'Catatan pengeluaran berhasil dihapus.' });
+    } else {
+      toast({
+        title: 'Tersimpan Lokal',
+        description: 'Gagal sinkron ke database. Perubahan tersimpan lokal.',
+      });
+    }
   };
 
   const summaryStats = useMemo(() => {

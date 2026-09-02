@@ -8,14 +8,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { DatePickerWithRange } from '@/components/ui/date-range-picker';
 import { subDays, format } from 'date-fns';
-import { id as idLocale } from 'date-fns/locale';
+import { id as idLocale } from 'date-fns/locale/id';
 import type { DateRange } from 'react-day-picker';
 import { generateFinancialStatements, type FinancialStatementResults } from '@/actions/financials';
 import { useToast } from '@/hooks/use-toast';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-import * as xlsx from 'xlsx';
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('id-ID', {
@@ -133,7 +132,7 @@ export default function FinancialStatementsPage() {
     }
   };
 
-  const handleExportStatements = () => {
+  const handleExportStatements = async () => {
     if (!statements) return;
 
     toast({ title: 'Mengekspor...', description: 'File Excel sedang dipersiapkan.' });
@@ -154,6 +153,7 @@ export default function FinancialStatementsPage() {
       ["Laba Bersih Akhir", pnl.netIncome],
     ];
 
+    const xlsx = await import('xlsx');
     const ws = xlsx.utils.aoa_to_sheet(dataToExport);
     ws['!cols'] = [{ wch: 35 }, { wch: 25 }];
     const wb = xlsx.utils.book_new();

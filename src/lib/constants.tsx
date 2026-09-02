@@ -35,9 +35,11 @@ export const SIDENAV_ITEMS = [
     icon: <ClipboardList size={iconSize} />,
     submenu: true,
     subMenuItems: [
-      { title: 'Tutup Harian', path: '/reports/end-of-day', icon: <CalendarCheck size={iconSize} /> },
+      { title: 'Tutup Kasir Harian', path: '/reports/daily-close', icon: <ReceiptText size={iconSize} /> },
+      { title: 'Rekap Harian', path: '/reports/end-of-day', icon: <CalendarCheck size={iconSize} /> },
       { title: 'Tutup Bulanan', path: '/reports/end-of-month', icon: <BarChart3 size={iconSize} /> },
       { title: 'Penjualan Harian', path: '/reports/daily-sales', icon: <Coins size={iconSize} /> },
+      { title: 'Riwayat Struk', path: '/reports/receipts', icon: <ReceiptText size={iconSize} /> },
       { title: 'Laporan Keuangan', path: '/reports/financial-statements', icon: <BookText size={iconSize} /> },
     ],
   },

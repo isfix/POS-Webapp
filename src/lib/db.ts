@@ -1,13 +1,95 @@
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { logger } from '@/lib/logger';
+
+export interface MutationResult<T = any> {
+  ok: boolean;
+  error?: string;
+  data?: T;
+}
+
+export interface PendingMutation {
+  id: string;
+  localKey: string;
+  payload: any;
+  attempts: number;
+  lastError?: string;
+  createdAt: string;
+}
+
+const PENDING_MUTATIONS_KEY = 'rotikita_pending_mutations';
+const MAX_PENDING_MUTATIONS = 50;
+
+/**
+ * Reads pending mutations queue from localStorage
+ */
+export function getPendingMutations(): PendingMutation[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(PENDING_MUTATIONS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Adds a failed mutation to the pending mutations queue (FIFO, max 50)
+ */
+export function enqueuePendingMutation(entry: Omit<PendingMutation, 'id' | 'attempts' | 'createdAt'>): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const existing = getPendingMutations();
+    const newEntry: PendingMutation = {
+      ...entry,
+      id: `mut-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      attempts: 1,
+      createdAt: new Date().toISOString(),
+    };
+    const updated = [newEntry, ...existing].slice(0, MAX_PENDING_MUTATIONS);
+    localStorage.setItem(PENDING_MUTATIONS_KEY, JSON.stringify(updated));
+  } catch (err) {
+    logger.warn('Gagal menyimpan pending mutation ke localStorage', { key: entry.localKey }, err);
+  }
+}
+
+/**
+ * Removes a pending mutation by ID
+ */
+export function dequeuePendingMutation(id: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const existing = getPendingMutations();
+    const updated = existing.filter(m => m.id !== id);
+    localStorage.setItem(PENDING_MUTATIONS_KEY, JSON.stringify(updated));
+  } catch (err) {
+    logger.warn('Gagal menghapus pending mutation', { id }, err);
+  }
+}
+
+/**
+ * Retries a specific local mutation manually
+ */
+export async function retryLocalMutation(
+  localKey: string,
+  mutationFn: () => PromiseLike<any> | Promise<any> | any
+): Promise<MutationResult> {
+  if (!isSupabaseConfigured()) {
+    return { ok: false, error: 'Koneksi database belum dikonfigurasi.' };
+  }
+
+  try {
+    const res = await mutationFn();
+    if (res && typeof res === 'object' && 'error' in res && res.error) {
+      return { ok: false, error: res.error.message || 'Database mutation returned error' };
+    }
+    return { ok: true, data: res?.data };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Database offline' };
+  }
+}
 
 /**
  * Executes a Supabase fetch query with automatic localStorage fallback and synchronization.
- * If Supabase is online and returns valid data:
- *   - Updates localStorage with the fresh data
- *   - Returns the parsed data
- * If Supabase is offline, unconfigured, or errors:
- *   - Reads cached data from localStorage
- *   - Returns cached data or fallbackDefault
  */
 export async function withFallback<T>(
   fetchFn: () => PromiseLike<any> | Promise<any> | any,
@@ -38,13 +120,13 @@ export async function withFallback<T>(
           try {
             localStorage.setItem(localKey, JSON.stringify(parsed));
           } catch (storageErr) {
-            console.warn(`Gagal memperbarui cache lokal untuk ${localKey}:`, storageErr);
+            logger.warn(`Gagal memperbarui cache lokal untuk ${localKey}`, { key: localKey }, storageErr);
           }
         }
         return parsed;
       }
     } catch (err) {
-      console.warn(`Koneksi database offline untuk ${localKey}, menggunakan cache lokal:`, err);
+      logger.debug(`Koneksi database offline untuk ${localKey}, menggunakan cache lokal`, { key: localKey });
     }
   }
 
@@ -59,7 +141,7 @@ export async function withFallback<T>(
         }
       }
     } catch (cacheErr) {
-      console.warn(`Gagal membaca ${localKey} dari penyimpanan lokal:`, cacheErr);
+      logger.warn(`Gagal membaca ${localKey} dari penyimpanan lokal`, { key: localKey }, cacheErr);
     }
   }
 
@@ -67,34 +149,60 @@ export async function withFallback<T>(
 }
 
 /**
- * Optimistically updates localStorage with the new state, and executes a database mutation in the background.
- * If the mutation fails or Supabase is offline, the local state remains safely persisted.
+ * Optimistically updates localStorage with the new state, and executes a database mutation.
+ * For authenticated users: executes Supabase mutation with JWT.
+ * For unauthenticated / demo users: stores locally without erroring.
+ * Returns { ok: boolean, error?: string, data?: any } without silently hiding real errors.
  */
 export async function mutateWithLocalSync<T>(
   localKey: string,
   updatedItems: T[],
   mutationFn?: () => PromiseLike<any> | Promise<any> | any
-): Promise<void> {
-  // 1. Optimistic write to localStorage
+): Promise<MutationResult> {
+  // 1. Optimistic write to localStorage (instant UX)
   if (typeof window !== 'undefined') {
     try {
       localStorage.setItem(localKey, JSON.stringify(updatedItems));
     } catch (e) {
-      console.warn(`Gagal memperbarui cache lokal untuk ${localKey}:`, e);
+      logger.warn(`Gagal memperbarui cache lokal untuk ${localKey}`, { key: localKey }, e);
     }
   }
 
   // 2. Execute DB mutation if Supabase is configured and mutation function provided
   if (mutationFn && isSupabaseConfigured()) {
     try {
+      // Check if user has an active authenticated Supabase session
+      let hasSession = false;
+      try {
+        const sessionRes = await supabase.auth.getSession();
+        hasSession = Boolean(sessionRes?.data?.session?.user);
+      } catch {
+        hasSession = false;
+      }
+
+      // If unauthenticated / demo mode: safely keep local-only state
+      if (!hasSession) {
+        return { ok: true, data: { mode: 'offline_local_demo' } };
+      }
+
+      // Authenticated session: execute remote mutation
       const res = await mutationFn();
       if (res && typeof res === 'object' && 'error' in res && res.error) {
-        console.warn(`Database mutation error untuk ${localKey}:`, res.error);
+        const errorMsg = res.error.message || 'Gagal menyimpan data ke database server.';
+        logger.warn(`Database mutation error untuk ${localKey}`, { key: localKey, error: res.error });
+        enqueuePendingMutation({ localKey, payload: updatedItems, lastError: errorMsg });
+        return { ok: false, error: errorMsg };
       }
-    } catch (e) {
-      console.warn(`Database mutation offline / tertunda untuk ${localKey}:`, e);
+      return { ok: true, data: res?.data };
+    } catch (e: any) {
+      const errorMsg = e?.message || 'Koneksi database offline / tertunda.';
+      logger.warn(`Database mutation offline / tertunda untuk ${localKey}`, { key: localKey }, e);
+      enqueuePendingMutation({ localKey, payload: updatedItems, lastError: errorMsg });
+      return { ok: false, error: errorMsg };
     }
   }
+
+  return { ok: true };
 }
 
 export const saveWithLocalSync = mutateWithLocalSync;

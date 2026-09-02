@@ -1,21 +1,36 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
 import { subDays, format } from 'date-fns';
-import { id as idLocale } from 'date-fns/locale';
+import { id as idLocale } from 'date-fns/locale/id';
 import { parseSafeDate } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton';
 
 import { StatsCards } from '@/components/dashboard/stats-cards';
-import { SalesChart } from '@/components/dashboard/sales-chart';
-import { ProfitChart } from '@/components/dashboard/profit-chart';
 import { TopItemsCard } from '@/components/dashboard/top-items-card';
 import { DailySummaryTable } from '@/components/dashboard/daily-summary-table';
 import { DailyInsights } from '@/components/dashboard/daily-insights';
+
+const SalesChart = dynamic(
+  () => import('@/components/dashboard/sales-chart').then((mod) => mod.SalesChart),
+  {
+    ssr: false,
+    loading: () => <Skeleton className="h-[240px] w-full rounded-xl" />,
+  }
+);
+
+const ProfitChart = dynamic(
+  () => import('@/components/dashboard/profit-chart').then((mod) => mod.ProfitChart),
+  {
+    ssr: false,
+    loading: () => <Skeleton className="h-[240px] w-full rounded-xl" />,
+  }
+);
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
 
 export type DashboardData = {
   stats: {

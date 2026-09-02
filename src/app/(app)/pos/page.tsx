@@ -3,6 +3,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { withFallback, mutateWithLocalSync } from '@/lib/db';
+import { enqueuePendingOrder, dequeuePendingOrder, drainPendingOrders } from '@/lib/order-queue';
+import { recordAudit } from '@/actions/audit';
 import { useToast } from '@/hooks/use-toast';
 
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -12,7 +14,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
-import { Search, ShoppingBag, Utensils, X } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Search, ShoppingBag, Utensils, X, Printer, Download, ReceiptText, CheckCircle2 } from 'lucide-react';
+import { Receipt } from '@/components/pos/receipt';
+import { type OrderData, printReceipt, downloadReceiptHTML } from '@/lib/print';
 
 export type CartItem = MenuItem & {
   quantity: number;
@@ -43,6 +48,8 @@ export default function PosPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Semua');
   const [isOrderSheetOpen, setIsOrderSheetOpen] = useState(false);
+  const [lastCompletedOrder, setLastCompletedOrder] = useState<OrderData | null>(null);
+  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -52,6 +59,13 @@ export default function PosPage() {
         () => supabase.from('menu_items').select('*').eq('availability', true).order('name', { ascending: true }),
         'rotikita_menu',
         {
+          fallbackDefault: [
+            { id: 'menu-1', name: 'Roti Cokelat Klasik', category: 'Roti Manis', price: 12000, costPrice: 6000, availability: true },
+            { id: 'menu-2', name: 'Roti Keju Spesial', category: 'Roti Manis', price: 15000, costPrice: 7500, availability: true },
+            { id: 'menu-3', name: 'Roti Tawar Premium', category: 'Roti Tawar', price: 18000, costPrice: 9000, availability: true },
+            { id: 'menu-4', name: 'Croissant Butter', category: 'Pastry & Croissant', price: 22000, costPrice: 11000, availability: true },
+            { id: 'menu-5', name: 'Donat Cokelat Tabur', category: 'Donat & Cookies', price: 10000, costPrice: 4000, availability: true },
+          ],
           transform: (data) => data.map((d: any) => ({
             id: d.id,
             name: d.name,
@@ -88,14 +102,32 @@ export default function PosPage() {
     });
   }, [menuItems, searchQuery, selectedCategory]);
 
+  const handleAddToCart = (item: MenuItem) => {
+    setCart((prevCart) => {
+      const existing = prevCart.find((ci) => ci.id === item.id);
+      if (existing) {
+        return prevCart.map((ci) =>
+          ci.id === item.id ? { ...ci, quantity: ci.quantity + 1 } : ci
+        );
+      }
+      return [...prevCart, { ...item, quantity: 1 }];
+    });
+  };
+
   const handleUpdateQuantity = (itemId: string, quantity: number) => {
     if (quantity <= 0) {
       setCart((prev) => prev.filter((item) => item.id !== itemId));
       return;
     }
-    setCart((prevCart) =>
-      prevCart.map((ci) => (ci.id === itemId ? { ...ci, quantity } : ci))
-    );
+    setCart((prevCart) => {
+      const existing = prevCart.find((ci) => ci.id === itemId);
+      if (existing) {
+        return prevCart.map((ci) => (ci.id === itemId ? { ...ci, quantity } : ci));
+      }
+      const item = menuItems.find((i) => i.id === itemId);
+      if (!item) return prevCart;
+      return [...prevCart, { ...item, quantity }];
+    });
   };
 
   const handleClearCart = () => {
@@ -119,6 +151,8 @@ export default function PosPage() {
       return;
     }
 
+    const normalizedPaymentMethod = paymentMethod === 'cash' ? 'Tunai' : (paymentMethod === 'qris' ? 'QRIS' : paymentMethod);
+
     const orderData = {
       id: `ord-${Date.now()}`,
       created_at: new Date().toISOString(),
@@ -134,12 +168,29 @@ export default function PosPage() {
       total_cost: totalCost,
       total_profit: totalProfit,
       total: total,
-      payment_method: paymentMethod,
+      payment_method: normalizedPaymentMethod,
       cash_given: cashGiven || total,
       change_due: cashGiven ? Math.max(0, cashGiven - total) : 0,
       customer_name: 'Walk-in Customer',
       status: 'Completed',
     };
+
+    // 1. Enqueue to pending orders before network attempt
+    enqueuePendingOrder(orderData);
+
+    // 2. Record structured audit trail
+    recordAudit({
+      action: `Transaksi Kasir ${orderData.id} (${orderData.items.length} item - ${formatCurrency(total)})`,
+      entityType: 'order',
+      entityId: orderData.id,
+      details: {
+        total,
+        paymentMethod: normalizedPaymentMethod,
+        itemCount: orderData.items.length,
+        items: orderData.items.map(i => `${i.name} x${i.quantity}`),
+      },
+      userName: 'Staf Kasir',
+    });
 
     let existingOrders: any[] = [];
     if (typeof window !== 'undefined') {
@@ -150,24 +201,39 @@ export default function PosPage() {
     }
     const updatedOrders = [orderData, ...existingOrders].slice(0, 100);
 
-    await mutateWithLocalSync('rotikita_orders', updatedOrders, () =>
+    // 2. Attempt DB write and update local state
+    const res = await mutateWithLocalSync('rotikita_orders', updatedOrders, () =>
       supabase.from('orders').insert([{
+        id: orderData.id,
         items: orderData.items,
         gross_revenue: grossRevenue,
         total_cost: totalCost,
         total_profit: totalProfit,
         total: total,
-        payment_method: paymentMethod,
+        payment_method: normalizedPaymentMethod,
         cash_given: cashGiven || total,
         change_due: cashGiven ? Math.max(0, cashGiven - total) : 0,
         customer_name: 'Walk-in Customer',
         status: 'Completed',
+        created_at: orderData.created_at,
       }])
     );
 
-    toast({ title: 'Pembayaran Berhasil', description: `Pesanan senilai ${formatCurrency(total)} sukses dicatat!` });
+    if (res.ok) {
+      dequeuePendingOrder(orderData.id);
+      toast({ title: 'Pembayaran Berhasil', description: `Pesanan senilai ${formatCurrency(total)} sukses dicatat!` });
+      drainPendingOrders();
+    } else {
+      toast({
+        title: 'Pesanan Tersimpan Lokal',
+        description: 'Pesanan berhasil dicatat dan akan disinkronkan ke server secara otomatis saat online.',
+      });
+    }
+
     handleClearCart();
     setIsOrderSheetOpen(false);
+    setLastCompletedOrder(orderData);
+    setIsReceiptModalOpen(true);
   };
   
   const getCartItemQuantity = (itemId: string) => {
@@ -304,6 +370,71 @@ export default function PosPage() {
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* Post-Payment Receipt Dialog */}
+      <Dialog open={isReceiptModalOpen} onOpenChange={setIsReceiptModalOpen}>
+        <DialogContent className="sm:max-w-md max-h-[90vh] flex flex-col p-4">
+          <DialogHeader className="pb-2">
+            <DialogTitle className="text-base font-bold flex items-center gap-2 text-foreground">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              Transaksi Berhasil
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              {lastCompletedOrder ? (
+                <span>Struk transaksi kasir <strong>{lastCompletedOrder.id}</strong> siap dicetak.</span>
+              ) : (
+                'Pesanan berhasil disimpan.'
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          {lastCompletedOrder && (
+            <div className="my-2 overflow-y-auto max-h-[55vh] py-1 bg-muted/20 rounded-md border border-border/60">
+              <Receipt order={lastCompletedOrder} />
+            </div>
+          )}
+
+          <DialogFooter className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-border">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs font-semibold text-muted-foreground hover:text-foreground order-3 sm:order-1"
+              onClick={() => setIsReceiptModalOpen(false)}
+            >
+              Lewati
+            </Button>
+            <div className="flex-1 hidden sm:block order-2" />
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs font-semibold gap-1.5 order-2 sm:order-2"
+              onClick={() => {
+                if (lastCompletedOrder) {
+                  downloadReceiptHTML(lastCompletedOrder);
+                  toast({ title: 'Tersimpan', description: `Struk ${lastCompletedOrder.id} berhasil diunduh.` });
+                }
+              }}
+            >
+              <Download className="h-3.5 w-3.5" />
+              Unduh HTML
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              className="text-xs font-bold gap-1.5 shadow-xs order-1 sm:order-3"
+              onClick={async () => {
+                if (lastCompletedOrder) {
+                  toast({ title: 'Mencetak Struk...', description: 'Mengirim struk ke printer termal.' });
+                  await printReceipt(lastCompletedOrder);
+                }
+              }}
+            >
+              <Printer className="h-3.5 w-3.5" />
+              Cetak Struk
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

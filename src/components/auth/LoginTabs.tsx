@@ -136,40 +136,40 @@ export function LoginTabs() {
 
   return (
     <div className="space-y-4 w-full">
-      {!isOnline && (
-        <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
-          <div className="flex items-center gap-1.5 font-bold">
-            <ShieldCheck className="h-4 w-4 text-amber-700" />
-            Mode Offline / Demo Lokal Aktif
-          </div>
-          <p className="mt-1 text-[11px] text-amber-800 leading-relaxed">
-            Kredensial Supabase Auth belum dikonfigurasi. Anda dapat langsung menggunakan tombol akun demo di bawah untuk menguji seluruh fitur POS secara lokal.
-          </p>
-          <div className="mt-2.5 flex gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="default"
-              className="h-7 text-xs bg-amber-700 hover:bg-amber-800 text-white font-semibold"
-              onClick={() => handleQuickDemoLogin('kasir')}
-              disabled={loading !== null}
-            >
-              <UserCheck className="mr-1 h-3.5 w-3.5" />
-              Masuk Demo Kasir
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs border-amber-300 text-amber-900 font-semibold bg-white"
-              onClick={() => handleQuickDemoLogin('admin')}
-              disabled={loading !== null}
-            >
-              Masuk Demo Manager
-            </Button>
-          </div>
+      <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+        <div className="flex items-center gap-1.5 font-bold">
+          <ShieldCheck className="h-4 w-4 text-amber-700" />
+          Akses Cepat Akun Demo (Lokal & Pengujian)
         </div>
-      )}
+        <p className="mt-1 text-[11px] text-amber-800 leading-relaxed">
+          Gunakan tombol di bawah untuk masuk langsung sebagai kasir atau manager toko tanpa akun Supabase.
+        </p>
+        <div className="mt-2.5 flex gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="default"
+            className="h-7 text-xs bg-amber-700 hover:bg-amber-800 text-white font-semibold"
+            onClick={() => handleQuickDemoLogin('kasir')}
+            disabled={loading !== null}
+            data-testid="demo-kasir-btn"
+          >
+            <UserCheck className="mr-1 h-3.5 w-3.5" />
+            Masuk Demo Kasir
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs border-amber-300 text-amber-900 font-semibold bg-white"
+            onClick={() => handleQuickDemoLogin('admin')}
+            disabled={loading !== null}
+            data-testid="demo-admin-btn"
+          >
+            Masuk Demo Manager
+          </Button>
+        </div>
+      </div>
 
       <Tabs defaultValue="sign-in" className="w-full">
         <TabsList className="grid w-full grid-cols-2 bg-secondary/80 p-1 border border-border">

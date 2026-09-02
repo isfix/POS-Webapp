@@ -8,7 +8,7 @@ import { generateAndStoreDailyAnalysis, getLatestDailyInsight, type DailyInsight
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '../ui/skeleton';
 import { formatDistanceToNow } from 'date-fns';
-import { id as idLocale } from 'date-fns/locale';
+import { id as idLocale } from 'date-fns/locale/id';
 import { parseSafeDate } from '@/lib/utils';
 
 type InsightCategory = 'lowStockItems' | 'topSellingItems' | 'slowMovingItems' | 'idleAssets' | 'profitAnomalies';

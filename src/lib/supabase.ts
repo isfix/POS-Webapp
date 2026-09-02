@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { logger } from "./logger";
 
 const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || "";
 const rawAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() || "";
@@ -24,7 +25,7 @@ const supabaseAnonKey = hasValidConfig ? rawAnonKey : "eyJhbGciOiJIUzI1NiIsInR5c
 export const supabaseBucketName = process.env.NEXT_PUBLIC_SUPABASE_BUCKET_NAME || "assets";
 
 if (!hasValidConfig) {
-  console.warn("⚠️ Supabase credentials tidak ditemukan atau belum dikonfigurasi. Menggunakan mode fallback offline.");
+  logger.warn("Supabase credentials tidak ditemukan atau belum dikonfigurasi. Menggunakan mode fallback offline.");
 }
 
 export const supabase = createClient(
@@ -51,6 +52,7 @@ export const isSupabaseConfigured = (): boolean => {
  */
 export const checkDatabaseHealth = async (): Promise<{ ok: boolean; message: string; latencyMs?: number }> => {
   if (!hasValidConfig) {
+    logger.debug('checkDatabaseHealth: Supabase unconfigured, offline fallback active');
     return {
       ok: false,
       message: 'Supabase belum dikonfigurasi. Mode fallback offline aktif.',
@@ -63,10 +65,14 @@ export const checkDatabaseHealth = async (): Promise<{ ok: boolean; message: str
     const { error } = await supabase.from('menu_items').select('id').limit(1);
     const latency = Date.now() - start;
     if (error) {
+      logger.debug('checkDatabaseHealth check error', { latency, error });
       return { ok: false, message: error.message, latencyMs: latency };
     }
+    logger.debug('checkDatabaseHealth check success', { latency });
     return { ok: true, message: 'Database Supabase terhubung dengan baik.', latencyMs: latency };
   } catch (err: any) {
-    return { ok: false, message: err?.message || 'Koneksi database offline / fallback aktif.', latencyMs: Date.now() - start };
+    const latency = Date.now() - start;
+    logger.debug('checkDatabaseHealth connection failed', { latency, err });
+    return { ok: false, message: err?.message || 'Koneksi database offline / fallback aktif.', latencyMs: latency };
   }
 };

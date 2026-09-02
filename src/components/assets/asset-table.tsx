@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { format } from "date-fns";
-import { id as idLocale } from 'date-fns/locale';
+import { id as idLocale } from 'date-fns/locale/id';
 import Image from 'next/image';
 import {
   Table,

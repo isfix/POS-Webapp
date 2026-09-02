@@ -8,7 +8,7 @@ import { Card, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { markNotificationAsSeen, markAllNotificationsAsSeen } from '@/actions/notifications';
 import { formatDistanceToNow } from 'date-fns';
-import { id as idLocale } from 'date-fns/locale';
+import { id as idLocale } from 'date-fns/locale/id';
 import { ScrollArea } from '../ui/scroll-area';
 import { cn, parseSafeDate } from '@/lib/utils';
 import { Separator } from '../ui/separator';

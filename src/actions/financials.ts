@@ -1,5 +1,4 @@
 import { supabase } from '@/lib/supabase';
-import * as xlsx from 'xlsx';
 import { runAutomatedFinancialProjection } from '@/actions/ai';
 import { differenceInMonths, startOfDay, endOfDay } from 'date-fns';
 
@@ -415,7 +414,8 @@ export async function generateFinancialStatements(
   };
 }
 
-export function exportProjectionsToExcel(results: ProjectionResults, fileName = "Proyeksi_Keuangan.xlsx") {
+export async function exportProjectionsToExcel(results: ProjectionResults, fileName = "Proyeksi_Keuangan.xlsx") {
+  const xlsx = await import('xlsx');
   const wb = xlsx.utils.book_new();
 
   const incomeData = results.incomeStatement.map((item) => ({

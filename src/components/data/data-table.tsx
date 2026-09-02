@@ -35,7 +35,6 @@ import { Badge } from '../ui/badge';
 import { ScrollArea, ScrollBar } from '../ui/scroll-area';
 import { supabase, supabaseBucketName } from '@/lib/supabase';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import * as xlsx from 'xlsx';
 
 export type MenuItem = {
   id: string;
@@ -218,7 +217,7 @@ export function DataTable({ menuItems, onAddItem, onEditItem, onDeleteItem }: Da
     setIsFormOpen(false);
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (filteredMenuItems.length === 0) {
       toast({ title: 'Data Kosong', description: 'Tidak ada daftar produk untuk diekspor.', variant: 'default' });
       return;
@@ -235,6 +234,7 @@ export function DataTable({ menuItems, onAddItem, onEditItem, onDeleteItem }: Da
       "URL Gambar": item.imageUrl || '-',
     }));
 
+    const xlsx = await import('xlsx');
     const ws = xlsx.utils.json_to_sheet(dataToExport);
     const wb = xlsx.utils.book_new();
     xlsx.utils.book_append_sheet(wb, ws, "Katalog Produk");

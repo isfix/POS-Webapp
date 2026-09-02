@@ -3,8 +3,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { withFallback, mutateWithLocalSync } from '@/lib/db';
+import { recordAudit } from '@/actions/audit';
 import { useToast } from '@/hooks/use-toast';
-import * as xlsx from 'xlsx';
 
 import { AssetTable, type Asset } from '@/components/assets/asset-table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -62,9 +62,20 @@ export default function AssetsPage() {
     };
     const updated = [newItem, ...assets];
     setAssets(updated);
-    toast({ title: 'Berhasil', description: 'Peralatan mesin baru berhasil didaftarkan.' });
 
-    await mutateWithLocalSync('rotikita_assets', updated, () =>
+    recordAudit({
+      action: `Mendaftarkan peralatan/aset '${newItemData.name}' (${formatCurrency(newItemData.price)})`,
+      entityType: 'asset',
+      entityId: tempId,
+      details: {
+        category: newItemData.category,
+        quantity: newItemData.quantity,
+        location: newItemData.location,
+        condition: newItemData.condition,
+      },
+    });
+
+    const res = await mutateWithLocalSync('rotikita_assets', updated, () =>
       supabase.from('assets').insert([{
         name: newItemData.name,
         category: newItemData.category,
@@ -80,14 +91,33 @@ export default function AssetsPage() {
         maintenance_date: newItemData.maintenanceDate,
       }])
     );
+
+    if (res.ok) {
+      toast({ title: 'Berhasil', description: 'Peralatan mesin baru berhasil didaftarkan.' });
+    } else {
+      toast({
+        title: 'Tersimpan Lokal',
+        description: 'Gagal sinkron ke database. Peralatan tersimpan lokal dan akan disinkronkan saat online.',
+      });
+    }
   };
 
   const handleEditItem = async (itemToUpdate: Asset) => {
     const updated = assets.map(item => item.id === itemToUpdate.id ? itemToUpdate : item);
     setAssets(updated);
-    toast({ title: 'Berhasil', description: 'Data peralatan berhasil diperbarui.' });
 
-    await mutateWithLocalSync('rotikita_assets', updated, () =>
+    recordAudit({
+      action: `Memperbarui data peralatan/aset '${itemToUpdate.name}'`,
+      entityType: 'asset',
+      entityId: itemToUpdate.id,
+      details: {
+        condition: itemToUpdate.condition,
+        status: itemToUpdate.status,
+        location: itemToUpdate.location,
+      },
+    });
+
+    const res = await mutateWithLocalSync('rotikita_assets', updated, () =>
       supabase.from('assets').update({
         name: itemToUpdate.name,
         category: itemToUpdate.category,
@@ -103,19 +133,42 @@ export default function AssetsPage() {
         maintenance_date: itemToUpdate.maintenanceDate,
       }).eq('id', itemToUpdate.id)
     );
+
+    if (res.ok) {
+      toast({ title: 'Berhasil', description: 'Data peralatan berhasil diperbarui.' });
+    } else {
+      toast({
+        title: 'Tersimpan Lokal',
+        description: 'Gagal sinkron ke database. Perubahan tersimpan lokal dan akan disinkronkan saat online.',
+      });
+    }
   };
 
   const handleDeleteItem = async (itemToDelete: Asset) => {
     const filtered = assets.filter(item => item.id !== itemToDelete.id);
     setAssets(filtered);
-    toast({ title: 'Berhasil', description: 'Peralatan berhasil dihapus dari inventaris.' });
 
-    await mutateWithLocalSync('rotikita_assets', filtered, () =>
+    recordAudit({
+      action: `Menghapus data peralatan/aset '${itemToDelete.name}'`,
+      entityType: 'asset',
+      entityId: itemToDelete.id,
+    });
+
+    const res = await mutateWithLocalSync('rotikita_assets', filtered, () =>
       supabase.from('assets').delete().eq('id', itemToDelete.id)
     );
+
+    if (res.ok) {
+      toast({ title: 'Berhasil', description: 'Peralatan berhasil dihapus dari inventaris.' });
+    } else {
+      toast({
+        title: 'Tersimpan Lokal',
+        description: 'Gagal sinkron ke database. Perubahan tersimpan lokal.',
+      });
+    }
   };
 
-  const handleExportAssets = (dataToExport: Asset[]) => {
+  const handleExportAssets = async (dataToExport: Asset[]) => {
     if (dataToExport.length === 0) {
       toast({ title: 'Data Kosong', description: 'Tidak ada data aset untuk diekspor.', variant: 'default' });
       return;
@@ -136,6 +189,7 @@ export default function AssetsPage() {
       'Catatan': item.notes || '',
     }));
 
+    const xlsx = await import('xlsx');
     const ws = xlsx.utils.json_to_sheet(formatted);
     const wb = xlsx.utils.book_new();
     xlsx.utils.book_append_sheet(wb, ws, "Daftar Aset");

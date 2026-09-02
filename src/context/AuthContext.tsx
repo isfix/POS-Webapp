@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import type { User } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { ensureMockDataInitialized } from '@/lib/mock-data';
+import { drainPendingOrders, setupOrderQueueListeners } from '@/lib/order-queue';
 
 export type AppUser = {
   id: string;
@@ -33,6 +34,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Ensure offline mock data is populated on first app load
     ensureMockDataInitialized();
+
+    // Auto-drain any pending offline orders on app boot
+    drainPendingOrders();
+
+    // Attach online event listeners for queue draining
+    const cleanupQueueListeners = setupOrderQueueListeners();
 
     // Check initial active session
     const initAuth = async () => {
@@ -71,8 +78,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     initAuth();
 
     // Subscribe to Supabase auth state changes if configured
+    let subscription: any = null;
     if (isSupabaseConfigured()) {
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const subRes = supabase.auth.onAuthStateChange((event, session) => {
         if (session?.user) {
           setUser({
             id: session.user.id,
@@ -80,17 +88,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             displayName: session.user.user_metadata?.name || session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
             user_metadata: session.user.user_metadata,
           });
-        } else {
-          // Explicit sign-out: clear active user completely
+        } else if (event === 'SIGNED_OUT') {
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('rotikita_auth_demo');
+          }
           setUser(null);
+        } else {
+          if (typeof window !== 'undefined') {
+            const demoSaved = localStorage.getItem('rotikita_auth_demo');
+            if (demoSaved) {
+              setUser(JSON.parse(demoSaved));
+            } else {
+              setUser(null);
+            }
+          }
         }
         setLoading(false);
       });
-
-      return () => {
-        subscription.unsubscribe();
-      };
+      subscription = subRes?.data?.subscription;
     }
+
+    return () => {
+      cleanupQueueListeners();
+      if (subscription) {
+        subscription.unsubscribe();
+      }
+    };
   }, []);
 
   const loginDemo = async (role: 'kasir' | 'admin' = 'kasir') => {

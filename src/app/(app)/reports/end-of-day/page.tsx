@@ -3,13 +3,13 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Download, Banknote, QrCode, ShoppingBag, DollarSign } from 'lucide-react';
+import Link from 'next/link';
+import { Download, Banknote, QrCode, ShoppingBag, DollarSign, Calculator, ArrowRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { startOfDay, endOfDay, format } from 'date-fns';
-import { id as idLocale } from 'date-fns/locale';
+import { id as idLocale } from 'date-fns/locale/id';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
-import * as xlsx from 'xlsx';
 
 type DailySummary = {
   date: string;
@@ -92,7 +92,7 @@ export default function EndOfDayReportPage() {
     fetchSupabaseEndOfDay();
   }, []);
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (!summary) return;
 
     toast({ title: 'Mengekspor...', description: 'Laporan tutup kasir sedang disiapkan.' });
@@ -105,6 +105,7 @@ export default function EndOfDayReportPage() {
       { 'Indikator': 'Total Penerimaan QRIS (Rp)', 'Nilai': summary.totalQrisSales },
     ];
 
+    const xlsx = await import('xlsx');
     const ws = xlsx.utils.json_to_sheet(dataToExport);
     const wb = xlsx.utils.book_new();
     xlsx.utils.book_append_sheet(wb, ws, "Rekap Tutup Kasir");
@@ -128,6 +129,27 @@ export default function EndOfDayReportPage() {
           Ekspor Excel
         </Button>
       </div>
+
+      {/* Physical Reconciliation CTA Banner */}
+      <Card className="border border-primary/20 bg-primary/5 p-3.5 rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-2xs">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-primary/10 text-primary">
+            <Calculator className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="text-xs font-bold text-foreground">Rekonsiliasi Fisik Uang Laci Kasir</div>
+            <div className="text-[11px] text-muted-foreground">
+              Hitung uang fisik di laci kasir dan cocokkan dengan saldo modal awal hari ini.
+            </div>
+          </div>
+        </div>
+        <Button asChild size="sm" variant="default" className="h-8 text-xs font-bold gap-1.5 self-start sm:self-auto shrink-0 shadow-xs">
+          <Link href="/reports/daily-close">
+            Lakukan Tutup Kasir dengan Hitung Fisik
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </Button>
+      </Card>
 
       {loading || !summary ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
