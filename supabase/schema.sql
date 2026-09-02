@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS public.inventory (
     unit_type TEXT NOT NULL DEFAULT 'kg',
     cost_per_unit NUMERIC NOT NULL DEFAULT 0 CHECK (cost_per_unit >= 0),
     supplier TEXT,
+    supplier_id TEXT,
     expiration_date DATE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
